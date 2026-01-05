@@ -1,0 +1,3 @@
+Add the AI files for the built model, the training model file, the processing data file, and the testing model file here in this folder
+
+We might want to build a good structure for the folder. We'll have to figure that out.
