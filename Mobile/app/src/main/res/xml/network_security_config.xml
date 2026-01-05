@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- 10.0.2.2 is how the Android Emulator talks to your computer's Localhost -->
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <!-- If testing on a physical phone, add your computer's local IP here too -->
+        <!-- <domain includeSubdomains="true">192.168.1.X</domain> -->
+    </domain-config>
+</network-security-config>
