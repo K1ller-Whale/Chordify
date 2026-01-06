@@ -1,6 +1,7 @@
 package com.arbaba.chordifymobile.utils;
 
 import android.media.MediaRecorder;
+import android.util.Log;
 import java.io.File;
 import java.io.IOException;
 
@@ -8,35 +9,46 @@ public class AudioHelper {
     private MediaRecorder recorder;
     private File outputFile;
 
-    // Start recording to a temp file
     public void startRecording(File cacheDir) throws IOException {
-        // Create a temp file ending in .m4a
-        outputFile = File.createTempFile("chord_audio", ".m4a", cacheDir);
+        // Create file in cache directory
+        outputFile = File.createTempFile("chord_recording", ".m4a", cacheDir);
 
         recorder = new MediaRecorder();
-        recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+        // VOICE_RECOGNITION is often optimized for clear audio input
+        recorder.setAudioSource(MediaRecorder.AudioSource.VOICE_RECOGNITION);
         recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
+
+        // Use AAC High Quality
         recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
-        recorder.setOutputFile(outputFile.getAbsolutePath());
-
-        // Standard quality settings
-        recorder.setAudioSamplingRate(22050);
         recorder.setAudioEncodingBitRate(128000);
+        recorder.setAudioSamplingRate(44100); // Standard CD quality, Librosa loves this
 
+        recorder.setOutputFile(outputFile.getAbsolutePath());
         recorder.prepare();
         recorder.start();
     }
 
-    // Stop recording and return the File object
     public File stopRecording() {
         if (recorder != null) {
             try {
                 recorder.stop();
-            } catch (RuntimeException stopException) {
-                // Handle case where recording was too short (instant tap)
+            } catch (RuntimeException e) {
+                // Occurs if recording was less than 1 second. Return null.
+                return null;
+            } finally {
+                recorder.release();
+                recorder = null;
             }
-            recorder.release();
-            recorder = null;
+        }
+
+        // Debugging: Check if file actually has data
+        if (outputFile != null) {
+            long size = outputFile.length();
+            Log.d("AudioHelper", "File created: " + outputFile.getAbsolutePath() + " | Size: " + size + " bytes");
+            if (size < 1000) {
+                // If file is tiny (< 1KB), it's likely silent/empty
+                Log.e("AudioHelper", "WARNING: Audio file is suspiciously small.");
+            }
         }
         return outputFile;
     }

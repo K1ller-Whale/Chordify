@@ -47,4 +47,10 @@ dependencies {
     // 3. Lifecycle (ViewModel & LiveData)
     implementation 'androidx.lifecycle:lifecycle-viewmodel:2.6.2'
     implementation 'androidx.lifecycle:lifecycle-livedata:2.6.2'
+
+    // 1. Lottie for Animations (The "Fun" part)
+    implementation 'com.airbnb.android:lottie:6.1.0'
+
+    // 2. CardView for modern boxes
+    implementation 'androidx.cardview:cardview:1.0.0'
 }
