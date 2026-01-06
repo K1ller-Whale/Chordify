@@ -6,11 +6,17 @@ import seaborn as sns
 from sklearn.metrics import confusion_matrix, classification_report
 import os
 from config import *
+from pydub import AudioSegment
 
 
 class Utils:
-    def extract_mcgill_style_features(audio_path, target_frames=100):
-        data, rate = librosa.load(audio_path, sr=44100, mono=True)
+    def extract_mcgill_style_features(
+        audio_path=None, y=None, sr=None, target_frames=100
+    ):
+        if audio_path is None:
+            data, rate = y, sr
+        else:
+            data, rate = librosa.load(audio_path, sr=44100, mono=True)
 
         chroma_res = vamp.collect(
             data, rate, "nnls-chroma:nnls-chroma", output="chroma"
@@ -143,3 +149,15 @@ class Utils:
 
         print("\nClassification Report:\n")
         print(classification_report(y_true, y_pred, target_names=class_names))
+
+    @staticmethod
+    def convert_m4a_to_wav(input_path, output_path):
+        """
+        Convert an M4A audio file to WAV format.
+
+        Args:
+            input_path (str): Path to the input M4A file.
+            output_path (str): Path to save the output WAV file.
+        """
+        audio = AudioSegment.from_file(input_path, format="m4a")
+        audio.export(output_path, format="wav")

@@ -1,7 +1,8 @@
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
-from tensorflow.keras import layers, models, regularizers, callbacks # type: ignore
+from tensorflow.keras import layers, models, regularizers, callbacks  # type: ignore
 from config import *
+import numpy as np
 
 
 class CRNN_Model:
@@ -101,3 +102,13 @@ class CRNN_Model:
     def load(self, file_path=MODEL_SAVE_FILE):
         self.model = models.load_model(file_path)
         print(f"Model loaded from {file_path}")
+
+    def evaluate_single_record(self, chroma):
+        new_chorma = chroma[..., np.newaxis]
+        new_chorma = np.expand_dims(new_chorma, 0)
+        prediction = self.model.predict(new_chorma)
+
+        predicted_idx = np.argmax(prediction)
+        confidence = float(np.max(prediction))
+
+        return predicted_idx, confidence
