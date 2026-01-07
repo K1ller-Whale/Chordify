@@ -11,7 +11,7 @@ from pydub import AudioSegment
 
 class Utils:
     def extract_mcgill_style_features(
-        audio_path=None, y=None, sr=None, target_frames=100
+        audio_path=None, y=None, sr=None, target_frames=100, slice=True    
     ):
         if audio_path is None:
             data, rate = y, sr
@@ -53,6 +53,8 @@ class Utils:
         if np.max(both_chroma) > 0:
             both_chroma = both_chroma / np.max(both_chroma)
 
+        if not slice:
+            return both_chroma
         if both_chroma.shape[0] < target_frames:
             padding = np.zeros((target_frames - both_chroma.shape[0], 24))
             both_chroma = np.vstack((both_chroma, padding))
@@ -61,6 +63,27 @@ class Utils:
             both_chroma = both_chroma[start : start + target_frames]
 
         return both_chroma
+
+    def save_chroma_plot(chroma, path=None, filename="chroma_plot.png", sr=22050, hop_length=512):
+        plt.figure(figsize=(14, 6))
+        print("Saving chroma plot...")
+        librosa.display.specshow(
+            chroma,
+            y_axis="chroma",
+            x_axis="time",
+            hop_length=hop_length,
+            sr=sr,
+            cmap="coolwarm",
+        )
+
+        plt.colorbar(label="Chroma Magnitude")
+        plt.title("Chromagram")
+        plt.xlabel("Time (seconds)")
+        plt.ylabel("Pitch Class")
+        plt.tight_layout()
+        print("Plot saved.")
+        plt.savefig(os.path.join(path, filename))
+        plt.close()
 
     def visualize_chroma(chroma, sr=22050, hop_length=512, title="Chromagram"):
         plt.figure(figsize=(14, 6))

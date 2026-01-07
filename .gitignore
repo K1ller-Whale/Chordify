@@ -212,3 +212,6 @@ Thumbs.db
 # Project-specific exclusions
 chordify_ai/assets/chord_dict.pkl
 chordify_ai/assets/label_map.pkl
+# Ignore generated chroma images inside backend
+chordify_backend/src/chromas/*.png
+chordify_backend/src/chromas/
