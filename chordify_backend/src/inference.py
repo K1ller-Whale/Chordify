@@ -42,5 +42,29 @@ class ChordRecognizer:
 
         return label, confidence
 
+    def predict_long_audio(self, chroma_tensor):
+        print(chroma_tensor.shape)
+        fixed_frames = self.model.input_shape[1]
+        if chroma_tensor.shape[0] < fixed_frames:
+            padding = np.zeros((fixed_frames - chroma_tensor.shape[0], 24))
+            chroma_tensor = np.vstack((chroma_tensor, padding))
+            print("short")
+            return self.predict(chroma_tensor)
+        else:
+            predictions = []
+            for i in range(chroma_tensor.shape[0] - fixed_frames + 1):
+                segment = chroma_tensor[i : i + fixed_frames]
+                segment = segment[..., np.newaxis]
+                segment = np.expand_dims(segment, 0)
+
+                prediction = self.model.predict(segment, verbose=0)
+                predictions.append(prediction)
+            avg_prediction = np.mean(predictions, axis=0)
+            predicted_idx = np.argmax(avg_prediction)
+            confidence = float(np.max(avg_prediction))
+            label = self.idx_to_label.get(predicted_idx, "Unknown")
+            print("long")
+            return label, confidence
+            
 
 recognizer = ChordRecognizer()

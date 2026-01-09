@@ -1,5 +1,6 @@
 from pydantic import BaseModel
-
+import numpy as np
+from typing import List
 
 class ChordPrediction(BaseModel):
     chord: str
@@ -8,3 +9,8 @@ class ChordPrediction(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+class TimeStamp(BaseModel):
+    start: str
+    end: str
