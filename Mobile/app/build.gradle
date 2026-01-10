@@ -37,20 +37,45 @@ dependencies {
     testImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.espresso.core
-    // 1. Retrofit (Networking) & Gson (JSON)
+    
+    // Retrofit (Networking) & Gson (JSON)
     implementation 'com.squareup.retrofit2:retrofit:2.9.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
 
-    // 2. OkHttp (Logging - helps debug API calls)
+    // OkHttp (Logging - helps debug API calls)
     implementation 'com.squareup.okhttp3:logging-interceptor:4.9.3'
 
-    // 3. Lifecycle (ViewModel & LiveData)
+    // Lifecycle (ViewModel & LiveData)
     implementation 'androidx.lifecycle:lifecycle-viewmodel:2.6.2'
     implementation 'androidx.lifecycle:lifecycle-livedata:2.6.2'
 
-    // 1. Lottie for Animations (The "Fun" part)
+    // Lottie for Animations
     implementation 'com.airbnb.android:lottie:6.1.0'
 
-    // 2. CardView for modern boxes
+    // CardView for modern boxes
     implementation 'androidx.cardview:cardview:1.0.0'
+    
+    // RecyclerView for history
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    
+    // Glide for image loading (chroma visualization)
+    implementation 'com.github.bumptech.glide:glide:4.16.0'
+    
+    // Navigation Component
+    implementation 'androidx.navigation:navigation-fragment:2.7.6'
+    implementation 'androidx.navigation:navigation-ui:2.7.6'
+    
+    // Room for local storage
+    implementation 'androidx.room:room-runtime:2.6.1'
+    annotationProcessor 'androidx.room:room-compiler:2.6.1'
+    implementation 'androidx.room:room-rxjava3:2.6.1'
+    
+    // SharedPreferences (simpler alternative for settings)
+    implementation 'androidx.preference:preference:1.2.1'
+    
+    // ViewPager2 for tabs
+    implementation 'androidx.viewpager2:viewpager2:1.1.0'
+    
+    // Fragment
+    implementation 'androidx.fragment:fragment:1.6.2'
 }

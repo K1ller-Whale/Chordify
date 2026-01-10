@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="6dp"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="2dp"
+    app:strokeWidth="0dp"
+    app:cardBackgroundColor="@color/surface_variant">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="16dp"
+        android:gravity="center_vertical">
+
+        <!-- Time Badge -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="@color/primary_container"
+            app:strokeWidth="0dp"
+            android:layout_marginEnd="16dp">
+
+            <TextView
+                android:id="@+id/tvTimeRange"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="0s - 5s"
+                android:textSize="12sp"
+                android:textColor="@color/on_primary_container"
+                android:textStyle="bold"
+                android:padding="8dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"/>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Chord Info -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvTimeStampedChord"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Am"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:textColor="@color/primary"/>
+
+        </LinearLayout>
+
+        <!-- Confidence Badge -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="0dp"
+            app:cardBackgroundColor="@color/secondary_container"
+            app:strokeWidth="0dp">
+
+            <TextView
+                android:id="@+id/tvTimeStampedConfidence"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="95.5%"
+                android:textSize="14sp"
+                android:textColor="@color/on_secondary_container"
+                android:textStyle="bold"
+                android:padding="8dp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"/>
+
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+
+</com.google.android.material.card.MaterialCardView>

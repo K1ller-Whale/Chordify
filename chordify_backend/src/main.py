@@ -32,7 +32,7 @@ app = FastAPI(title="Chord Recognition API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],  # Allow all origins for mobile app access
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -59,26 +59,40 @@ async def extract_full_chroma(file: UploadFile = File(...)):
         # formatted = now.strftime("%Y-%m-%d%H:%M:%S.%f")
         file_name = f"{datetime.now(timezone.utc).timestamp()}.png"
         print(file_name)
-        file_path = os.path.join(CHROMA_DIR, file_name)
-        print(file_path)
-        Utils.save_chroma_plot(chroma.T, path=CHROMA_DIR, filename=file_name, sr=sr, hop_length=2048)
+        
+        # Ensure CHROMA_DIR is absolute and exists
+        chroma_dir_abs = os.path.join(BASE_DIR, CHROMA_DIR) if not os.path.isabs(CHROMA_DIR) else CHROMA_DIR
+        os.makedirs(chroma_dir_abs, exist_ok=True)
+        
+        file_path = os.path.join(chroma_dir_abs, file_name)
+        print(f"Full file path: {file_path}")
+        Utils.save_chroma_plot(chroma.T, path=chroma_dir_abs, filename=file_name, sr=sr, hop_length=2048)
+        
+        # Verify file was created
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Chroma plot file was not created at {file_path}")
+            
     except Exception as e:
         print(f"Feature extraction failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=500, detail=f"Feature extraction failed: {str(e)}"
         )
 
-    # 5. Model Inference
+    # 5. Return the file
     try:
-        print(chroma.shape)
+        print(f"Returning chroma file: {file_path}")
         return FileResponse(
             file_path,
             media_type="image/png",
-            filename="sample.png"
+            filename="chroma_visualization.png"
         )
     except Exception as e:
-        print(f"Prediction failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Prediction failed: {str(e)}")
+        print(f"File response failed: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"File response failed: {str(e)}")
 
 
 
@@ -179,4 +193,4 @@ async def predict_time_stamps(file: UploadFile = File(...), timestamps: str = Fo
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("main:app", host="localhost", port=8000, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
