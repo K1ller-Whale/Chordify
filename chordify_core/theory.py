@@ -348,9 +348,13 @@ def find_patterns(numerals: Sequence[str], lengths: Sequence[int] = (4, 3), min_
             rotation, count = members.most_common(1)[0]
             if count < min_count or any(_inside_loop(rotation, c) for c in covered):
                 continue
-            name = next((NAMED_PROGRESSIONS[r] for r in _rotations(rotation) if r in NAMED_PROGRESSIONS), None)
-            if name:
-                rotation = next(r for r in _rotations(rotation) if r in NAMED_PROGRESSIONS)
+            # Several rotations of a loop can have names (I–V–vi–IV and vi–IV–I–V); the table's
+            # order decides which one is shown, so a loop is always presented the same way.
+            rotations = set(_rotations(rotation))
+            canonical_rotation = next((r for r in NAMED_PROGRESSIONS if r in rotations), None)
+            name = NAMED_PROGRESSIONS[canonical_rotation] if canonical_rotation else None
+            if canonical_rotation:
+                rotation = canonical_rotation
             found.append({"roman": list(rotation), "name": name, "count": count})
             covered.add(canonical)
     found.sort(key=lambda p: (-p["count"], -len(p["roman"])))

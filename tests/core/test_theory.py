@@ -114,3 +114,9 @@ def test_find_patterns_merges_rotations_and_names_them():
 
 def test_find_patterns_ignores_rare_loops():
     assert theory.find_patterns(["I", "IV", "V", "vi"]) == []
+
+
+def test_named_loop_is_shown_in_its_canonical_rotation():
+    numerals = ["vi", "IV", "I", "V"] * 5  # starts on vi, still the Axis loop
+    top = theory.find_patterns(numerals)[0]
+    assert top["roman"] == ["I", "V", "vi", "IV"] and top["name"].startswith("I–V–vi–IV")
