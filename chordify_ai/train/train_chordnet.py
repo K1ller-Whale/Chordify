@@ -11,6 +11,7 @@ Synthetic pre-training / smoke run (no downloads beyond ChoCo):
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -82,6 +83,7 @@ def main(argv: list[str] | None = None) -> int:
                      decoder={"alpha": 0.3, "subdivide": 1, "min_units": 1},
                      metrics={"validation": checkpoint["validation"], "epoch": checkpoint["epoch"]},
                      training_data={"source": args.source, "split": Path(args.split_file).name,
+                                    "split_sha256": hashlib.sha256(Path(args.split_file).read_bytes()).hexdigest(),
                                     "train_songs": len(train_tracks), "validation_songs": len(val_tracks)})
         print(f"bundle written to {args.export}")
     return 0
