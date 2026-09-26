@@ -201,7 +201,7 @@ def predict_next(model: NgramProgressionModel, history: Sequence[str], key: Key,
     lengths: dict[str, list[float]] = {}
     for i, (label, tok) in enumerate(zip(history, tokens)):
         seen.setdefault(tok, label)
-        if history_beats is not None:
+        if history_beats is not None and history_beats[i] > 0:
             lengths.setdefault(tok, []).append(float(history_beats[i]))
     candidates = model.top(tokens, k)
     last = history[-1] if history else None

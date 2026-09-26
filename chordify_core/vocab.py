@@ -350,6 +350,42 @@ def display_name(label: str, flats: bool | None = None) -> str:
     return text
 
 
+# Lead-sheet suffix -> Harte quality (longest suffixes are tried first).
+_LEADSHEET = {
+    "": "maj", "M": "maj", "maj": "maj", "m": "min", "min": "min", "-": "min", "7": "7", "dom7": "7",
+    "maj7": "maj7", "M7": "maj7", "Δ": "maj7", "Δ7": "maj7", "m7": "min7", "min7": "min7", "-7": "min7",
+    "dim": "dim", "°": "dim", "o": "dim", "dim7": "dim7", "°7": "dim7", "o7": "dim7", "m7b5": "hdim7",
+    "ø": "hdim7", "ø7": "hdim7", "aug": "aug", "+": "aug", "6": "maj6", "m6": "min6", "9": "9", "maj9": "maj9",
+    "m9": "min9", "11": "11", "m11": "min11", "13": "13", "sus2": "sus2", "sus4": "sus4", "sus": "sus4",
+    "5": "5", "add9": "maj(9)", "madd9": "min(9)", "m(add9)": "min(9)", "7sus4": "sus4(b7)", "9sus4": "sus4(b7,9)",
+    "7#9": "7(#9)", "7b9": "7(b9)", "m(maj7)": "minmaj7", "mMaj7": "minmaj7", "6/9": "maj6(9)", "aug7": "aug(b7)",
+}
+_SEMITONE_DEGREE = ("1", "b2", "2", "b3", "3", "4", "b5", "5", "b6", "6", "b7", "7")
+
+
+def parse_display(name: str) -> str:
+    """Lead-sheet chord name -> Harte label: 'Em' -> 'E:min', 'Bm7' -> 'B:min7', 'C/E' -> 'C:maj/3',
+    'A7sus4' -> 'A:sus4(b7)', 'N.C.' -> 'N'. Harte labels pass through unchanged."""
+    name = name.strip()
+    if name.upper() in ("N", "N.C.", "NC"):
+        return NO_CHORD
+    if ":" in name:
+        parse(name)
+        return name
+    root_text = _root_text(name)
+    root = note_to_pc(root_text)
+    body, slash, bass_text = name[len(root_text):].partition("/")
+    if body not in _LEADSHEET:
+        raise ValueError(f"unknown chord name: {name!r}")
+    label = f"{root_text}:{_LEADSHEET[body]}"
+    if slash:
+        if body == "6" and bass_text == "9":  # 6/9 chord, not a slash chord
+            return f"{root_text}:maj6(9)"
+        label += "/" + _SEMITONE_DEGREE[(note_to_pc(bass_text) - root) % 12]
+    parse(label)
+    return label
+
+
 def unique_in_order(labels: Iterable[str]) -> list[str]:
     seen: dict[str, None] = {}
     for label in labels:

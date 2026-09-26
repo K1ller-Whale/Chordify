@@ -120,3 +120,23 @@ def test_chord_tones_and_triads():
     assert vocab.triad(vocab.parse("C:5")) == "5"
     assert vocab.triad(vocab.parse("C:1")) == "1"
     assert vocab.triad(vocab.parse("N")) is None
+
+
+@pytest.mark.parametrize("name, harte", [
+    ("C", "C:maj"), ("Em", "E:min"), ("Bm7", "B:min7"), ("G7", "G:7"), ("Fmaj7", "F:maj7"), ("C/E", "C:maj/3"),
+    ("Am/C", "A:min/b3"), ("A7sus4", "A:sus4(b7)"), ("Bbsus2", "Bb:sus2"), ("F#m7b5", "F#:hdim7"),
+    ("Cadd9", "C:maj(9)"), ("Ddim", "D:dim"), ("C6/9", "C:maj6(9)"), ("N.C.", "N"), ("G:maj", "G:maj"),
+])
+def test_parse_display(name, harte):
+    assert vocab.parse_display(name) == harte
+
+
+@pytest.mark.parametrize("label", ["A:sus4(b7)", "B:min7", "C:maj/3", "A:min/b3", "F#:hdim7", "C:maj(9)", "E:7(#9)"])
+def test_display_name_roundtrips_through_parse_display(label):
+    assert vocab.parse_display(vocab.display_name(label)) == label
+
+
+@pytest.mark.parametrize("bad", ["H", "Cfoo", "C/H"])
+def test_parse_display_rejects_unknown_names(bad):
+    with pytest.raises(ValueError):
+        vocab.parse_display(bad)
