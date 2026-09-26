@@ -27,8 +27,9 @@ class Models:
 
     @property
     def fingerprint(self) -> str:
-        """Part of the analysis cache key: a new model means re-analysis, never stale results."""
-        return hashlib.sha256(json.dumps(self.ids, sort_keys=True).encode()).hexdigest()[:16]
+        """Part of the analysis cache key: a new model or feature revision means re-analysis, never stale results."""
+        key = self.ids | {"feature_revision": self.acoustic.feature_spec.revision}
+        return hashlib.sha256(json.dumps(key, sort_keys=True).encode()).hexdigest()[:16]
 
     @classmethod
     def load(cls, settings: Settings) -> "Models":

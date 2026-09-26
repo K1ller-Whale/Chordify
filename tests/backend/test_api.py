@@ -140,3 +140,16 @@ def test_cors_allows_only_configured_origins(client):
     assert ok.headers.get("access-control-allow-origin") == "http://localhost:5173"
     blocked = client.options("/api/v2/models", headers={"Origin": "https://evil.example", "Access-Control-Request-Method": "GET"})
     assert "access-control-allow-origin" not in blocked.headers
+
+
+def test_cache_key_changes_with_the_feature_revision():
+    from dataclasses import replace
+
+    from chordify_backend.app.pipeline.models import Models
+    from chordify_core.acoustic import TemplateChordModel
+    from chordify_core.features import CQT_BOTHCHROMA
+
+    current = Models(acoustic=TemplateChordModel(CQT_BOTHCHROMA), lm=None, lm_id="lm@1")
+    older = Models(acoustic=TemplateChordModel(replace(CQT_BOTHCHROMA, revision=1)), lm=None, lm_id="lm@1")
+    assert current.ids == older.ids
+    assert current.fingerprint != older.fingerprint
