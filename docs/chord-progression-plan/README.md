@@ -8,6 +8,8 @@ Today Chordify recognises **one chord per clip**. This plan takes it to:
 
 It covers the datasets (including an assessment of the Billboard dataset v1 was trained on), the model architecture, the software architecture and the communication between the web/Android clients, the backend and the models.
 
+> **Status:** phases 0–2 are largely built (core library, ChordNet training stack, v2 API, new web app). ChordNet still needs training on real Billboard features. See [08 · Implementation status](08-implementation-status.md).
+
 ## Documents
 
 | # | Document | Contents |
@@ -19,6 +21,7 @@ It covers the datasets (including an assessment of the Billboard dataset v1 was 
 | 05 | [API and communication](05-api-and-communication.md) | REST v2, SSE progress, WebSocket live protocol, the `AnalysisResult` schema, v1 compatibility, errors |
 | 06 | [Frontend and visualization](06-frontend-visualization.md) | Screens, components, colour encoding, playback sync, interactions, Android |
 | 07 | [Roadmap](07-roadmap.md) | Phases 0–5 with tasks, exit criteria, timeline, risks |
+| 08 | [Implementation status](08-implementation-status.md) | What is built, measured results, where the build differs from the plan, next steps |
 | — | [`mockup/analysis-view.html`](mockup/analysis-view.html) | Clickable mockup of the analysis screen, driven by a real `AnalysisResult` |
 | — | [`scripts/`](scripts/) | Reproduces every number, chart and screenshot in these documents |
 

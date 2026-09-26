@@ -13,8 +13,8 @@ uvicorn chordify_backend.app.main:app --reload --port 8000
 # OpenAPI docs: http://localhost:8000/docs
 ```
 
-`ffmpeg` must be on the PATH to decode m4a/aac and webm uploads (the web recorder
-produces webm). For Billboard-compatible NNLS chroma features also install `vamp`
+`ffmpeg` must be on the PATH to decode m4a/aac and webm uploads (the web app records
+WAV, so its recordings do not need it). For Billboard-compatible NNLS chroma features also install `vamp`
 and build the plugin with `tools/install_nnls_chroma.sh`; without it the service
 uses the plugin-free CQT chroma at the same frame rate.
 
