@@ -94,21 +94,23 @@ What could be measured, on synthetic renders of the validation annotations (25 s
 |---|---|---|---|---|
 | `chroma-templates@0.1.0` | NNLS | 98.2 % | 67.3 % | 0.90 |
 | `chroma-templates@0.1.0` | CQT (revision 2) | 97.0 % | 66.1 % | 0.87 |
+| ChordNet Conformer (3.6 M parameters), trained on 150 other synthetic songs, best of 10 epochs, served from ONNX | CQT (revision 2) | 99.3 % | 67.7 % | 0.93 |
 
-Synthetic renders check that the pipeline works end to end (features, timing, decoder, export). They are **not** a quality gate: templates are near the ceiling on clean synthetic chords, and the real test is Billboard.
+Synthetic renders check that the pipeline works end to end: features, timing, training, ONNX export, windowed inference and the decoder. They are **not** a quality gate. Both models are near the ceiling on clean synthetic chords, and neither has heard a real band, so the real test is Billboard. Both miss sevenths, because the `majmin` vocabulary maps G:7 to G.
 
 This benchmark found one real bug. The CQT chroma kept a bin a third of a semitone sharp, and it estimated tuning modulo 33 cents, so recordings tuned more than 17 cents flat were read a semitone low. The template score on these renders went from 59.1 % to 97.0 % once that was fixed. Feature specs now carry a `revision`, and a bundle trained on an older revision is refused instead of silently mis-served.
 
 ### 3.5 Latency
 
-Full analysis of a 296 s song on a 4-vCPU container, warm (every stage: decode, beats, features, model, both decoder passes, key, theory, predictions):
+Full analysis of the 296 s song in the screenshot on a 4-vCPU container, warm, two runs each. Every stage is included: decode, beats, features, model, both decoder passes, key, theory, predictions.
 
 | Chord model | Features | Time |
 |---|---|---|
-| templates | NNLS | 6.2 s |
-| templates | CQT | 4.5 s |
+| templates | NNLS | 5.4–5.8 s |
+| templates | CQT | 3.2–3.4 s |
+| ChordNet Conformer (ONNX Runtime) | CQT | 3.6–4.1 s |
 
-The phase 1 budget is p95 ≤ 20 s for a 4-minute song.
+The phase 1 budget is p95 ≤ 20 s for a 4-minute song. Switching features from CQT to NNLS costs about 2 s; switching the model from templates to ChordNet costs about 0.5 s.
 
 ## 4. Where the build differs from the plan
 
