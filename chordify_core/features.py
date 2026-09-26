@@ -30,6 +30,7 @@ class FeatureSpec:
     hop: int
     n_bins: int
     offset: float = 0.0  # time (s) at the centre of frame 0
+    revision: int = 1  # bumped whenever the extractor's output changes; bundles and caches record it
 
     @property
     def frame_rate(self) -> float:
@@ -46,15 +47,15 @@ class FeatureSpec:
     def from_dict(cls, data: dict) -> "FeatureSpec":
         default = SPECS[data["kind"]].offset if data["kind"] in SPECS else 0.0
         return cls(data["kind"], int(data["sample_rate"]), int(data["hop"]), int(data["n_bins"]),
-                   float(data.get("offset", default)))
+                   float(data.get("offset", default)), int(data.get("revision", 1)))
 
 
 # Billboard's released features: NNLS Chroma plugin at 44.1 kHz, step 2048 (46.4 ms), block 16384.
 # The Vamp host stamps each frame at the centre of its 16384-sample block, so frame 0 is at 0.186 s.
 NNLS_BOTHCHROMA = FeatureSpec("nnls_bothchroma", 44100, 2048, 24, offset=NNLS_BLOCK / 2 / 44100)
 # Same frame rate and layout without the Vamp plugin (librosa CQT folded into bass/treble chroma).
-# librosa centres frame i at i * hop.
-CQT_BOTHCHROMA = FeatureSpec("cqt_bothchroma", 22050, 1024, 24)
+# librosa centres frame i at i * hop. Revision 2: centre bins on the note, tuning estimated per semitone.
+CQT_BOTHCHROMA = FeatureSpec("cqt_bothchroma", 22050, 1024, 24, revision=2)
 # v3 input: 3 bins per semitone, C1 - 6 st to C8 + 6 st, same 21.53 fps frame rate.
 LOG_CQT = FeatureSpec("log_cqt", 22050, 1024, 288)
 SPECS = {s.kind: s for s in (NNLS_BOTHCHROMA, CQT_BOTHCHROMA, LOG_CQT)}
@@ -137,9 +138,14 @@ def cqt_bothchroma(y: np.ndarray, sr: int) -> np.ndarray:
     spec = CQT_BOTHCHROMA
     y22 = resample(y, sr, spec.sample_rate)
     # 3 bins per semitone, tuned to the recording; keeping each semitone's centre bin
-    # avoids the heavy leakage of a 12-bin-per-octave CQT's wide filters.
-    tuning = librosa.estimate_tuning(y=y22, sr=spec.sample_rate, bins_per_octave=36) if len(y22) > 4096 else 0.0
-    cqt = np.abs(librosa.cqt(y22, sr=spec.sample_rate, hop_length=spec.hop, fmin=_CQT_FMIN_C1,
+    # avoids the heavy leakage of a 12-bin-per-octave CQT's wide filters. The grid starts
+    # one bin below C1 so the centre bin sits on the note. Tuning is estimated per
+    # semitone (±50 cents) and converted to CQT bins: a per-bin estimate wraps every
+    # 33 cents and would file anything tuned >17 cents flat under the semitone below.
+    tuning = 0.0
+    if len(y22) > 4096:
+        tuning = 3.0 * float(librosa.estimate_tuning(y=y22, sr=spec.sample_rate, bins_per_octave=12))
+    cqt = np.abs(librosa.cqt(y22, sr=spec.sample_rate, hop_length=spec.hop, fmin=_CQT_FMIN_C1 * 2 ** (-1 / 36),
                              n_bins=252, bins_per_octave=36, tuning=tuning)).astype(np.float32)
     cqt = cqt.reshape(84, 3, -1)[:, 1, :]
     semitone = np.arange(84)
@@ -168,6 +174,10 @@ def log_cqt(y: np.ndarray, sr: int) -> np.ndarray:
 
 def extract(spec: FeatureSpec, y: np.ndarray, sr: int) -> np.ndarray:
     """Raw (T, n_bins) features for ``spec``."""
+    current = SPECS.get(spec.kind)
+    if current is not None and spec.revision != current.revision:
+        raise ValueError(f"{spec.kind} revision {spec.revision} was requested but this code extracts revision "
+                         f"{current.revision}; retrain or re-export the model on the current features")
     if spec.kind == "nnls_bothchroma":
         return nnls_bothchroma(y, sr)
     if spec.kind == "cqt_bothchroma":

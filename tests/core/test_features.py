@@ -81,6 +81,14 @@ def test_cqt_bothchroma_finds_chord_tones(label, expected_treble, expected_bass)
     assert np.argmax(frame[:12]) == expected_bass
 
 
+@pytest.mark.parametrize("cents", [-45, -30, -17, 17, 30, 45])
+def test_cqt_bothchroma_survives_detuned_recordings(cents):
+    y = synth.render_chord("A:min", 3.0, sr=22050, detune_cents=cents)
+    frame = middle(features.extract(CQT_BOTHCHROMA, y, 22050))
+    assert top(frame[12:]) == {A, C, E}
+    assert np.argmax(frame[:12]) == A
+
+
 def test_both_chroma_kinds_share_the_frame_rate():
     assert CQT_BOTHCHROMA.frame_rate == pytest.approx(NNLS_BOTHCHROMA.frame_rate)
     assert LOG_CQT.frame_rate == pytest.approx(NNLS_BOTHCHROMA.frame_rate)
@@ -117,6 +125,14 @@ def test_transposing_audio_matches_rolling_features():
 def test_feature_spec_roundtrip():
     for spec in (NNLS_BOTHCHROMA, CQT_BOTHCHROMA, LOG_CQT):
         assert features.FeatureSpec.from_dict(spec.to_dict()) == spec
+
+
+def test_models_trained_on_an_older_feature_revision_are_refused():
+    legacy = {k: v for k, v in CQT_BOTHCHROMA.to_dict().items() if k != "revision"}  # pre-revision bundle.json
+    spec = features.FeatureSpec.from_dict(legacy)
+    assert spec.revision == 1
+    with pytest.raises(ValueError, match="revision 1 was requested"):
+        features.extract(spec, np.zeros(22050, dtype=np.float32), 22050)
 
 
 def test_load_audio_resamples_wav_bytes():

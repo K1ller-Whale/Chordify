@@ -66,7 +66,7 @@ def synthetic(tracks: list[billboard.BillboardTrack], vocabulary: vocab.Vocabula
         if max_seconds is not None and chords:
             s, e, lab = chords[-1]
             chords[-1] = (s, min(e, max_seconds), lab)
-        path = cache / f"{track.track_id}-{spec.kind}-{seed}.npy" if cache else None
+        path = cache / f"{track.track_id}-{spec.kind}-r{spec.revision}-{seed}.npy" if cache else None
         if path and path.exists():
             raw = np.load(path)
         else:
