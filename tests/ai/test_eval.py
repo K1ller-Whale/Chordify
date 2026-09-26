@@ -51,3 +51,8 @@ def test_lab_roundtrip_and_cli(tmp_path, capsys):
     assert ev.main([str(tmp_path / "ref"), str(tmp_path / "est")]) == 0
     table = dict(line.split() for line in capsys.readouterr().out.splitlines())
     assert table["majmin"] == "100.00" and table["seg"] == "100.00"
+
+
+def test_overlapping_or_unsorted_intervals_are_sanitised():
+    messy = [(1.0, 3.0000001, "C:maj"), (0.0, 1.0, "N"), (3.0, 9.0, "G:7")]
+    assert ev.evaluate_track(REF, messy)["root"] > 0

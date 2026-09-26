@@ -107,3 +107,22 @@ def test_committed_billboard_split_file():
     ids = data["train"] + data["validation"] + data["test"]
     assert len(ids) == len(set(ids)) == 890
     assert (len(data["train"]), len(data["validation"]), len(data["test"])) == (712, 89, 89)
+
+
+def test_check_intervals_trims_rounding_and_flags_corruption():
+    clean, issues = billboard.check_intervals([(0.0, 1.0000001, "N"), (1.0, 2.0, "C:maj")])
+    assert issues == [] and clean[0][1] == 1.0
+    _, issues = billboard.check_intervals([(0.0, 1.0, "N"), (5.0, 2.0, "C:maj")])
+    assert any("ends before it starts" in i for i in issues)
+    _, issues = billboard.check_intervals([(0.0, 170.0, "F:maj"), (0.4, 2.5, "N")])
+    assert issues
+
+
+def test_loader_drops_corrupt_tracks(tmp_path):
+    good = [(0.0, 1.0, "N"), (1.0, 3.0, "C:maj")]
+    bad = [(0.0, 3.0, "C:maj"), (0.5, 0.0, "G:maj")]
+    root = make_choco(tmp_path, [("0001", "Good", "A", good), ("0002", "Bad", "B", bad)])
+    with pytest.warns(UserWarning, match="0002 skipped"):
+        tracks = billboard.load_choco_billboard(root)
+    assert [t.track_id for t in tracks] == ["0001"]
+    assert len(billboard.load_choco_billboard(root, drop_invalid=False)) == 2

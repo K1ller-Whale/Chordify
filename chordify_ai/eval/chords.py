@@ -21,8 +21,15 @@ Interval = tuple[float, float, str]
 
 
 def _arrays(segments: Sequence[Interval]) -> tuple[np.ndarray, list[str]]:
-    intervals = np.array([[s, e] for s, e, _ in segments], dtype=np.float64)
-    return intervals, [label for _, _, label in segments]
+    """Sorted, non-overlapping, non-empty intervals (mir_eval rejects overlaps)."""
+    rows = []
+    for start, end, label in sorted(segments, key=lambda s: s[0]):
+        if rows and rows[-1][1] > start:
+            rows[-1][1] = start
+        if end > start:
+            rows.append([start, end, label])
+    rows = [r for r in rows if r[1] > r[0]]
+    return np.array([[s, e] for s, e, _ in rows], dtype=np.float64), [label for _, _, label in rows]
 
 
 def evaluate_track(reference: Sequence[Interval], estimate: Sequence[Interval]) -> dict[str, float]:

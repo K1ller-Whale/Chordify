@@ -70,11 +70,11 @@ def main(argv: list[str] | None = None) -> int:
 
     tracks = {t.track_id: t for t in billboard.load_choco_billboard(args.choco)}
     split = splits.read_split_file(args.split_file)
-    train = [track_tokens(tracks[i]) for i in split["train"]]
-    test = [track_tokens(tracks[i]) for i in split["test"]]
+    # ids whose annotations were dropped as corrupt (see billboard.check_intervals) are skipped
+    tokens = {name: [track_tokens(tracks[i]) for i in ids if i in tracks] for name, ids in split.items()}
+    train = tokens["train"]
     model = NgramProgressionModel.fit(train, order=args.order)
-    metrics = {name: evaluate(model, seqs) for name, seqs in (("validation", [track_tokens(tracks[i]) for i in split["validation"]]),
-                                                               ("test", test))}
+    metrics = {name: evaluate(model, tokens[name]) for name in ("validation", "test")}
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)

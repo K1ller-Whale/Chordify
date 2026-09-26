@@ -157,8 +157,31 @@ def parse_salami(text: str) -> dict:
     return {"header": header, "tonics": tonics, "metres": metres, "sections": sections, "bars": bars}
 
 
-def load_choco_billboard(choco_root: str | os.PathLike) -> list[BillboardTrack]:
-    """All 890 Billboard annotations from a ChoCo checkout."""
+def check_intervals(chords: list[tuple[float, float, str]], tolerance: float = 0.05
+                    ) -> tuple[list[tuple[float, float, str]], list[str]]:
+    """Trim float-rounding overlaps; report real problems (reversed or out-of-order intervals)."""
+    issues, clean = [], []
+    for i, (start, end, label) in enumerate(chords):
+        if end < start - 1e-6:
+            issues.append(f"interval {i} ends before it starts ({start:.3f} > {end:.3f})")
+        if clean and start < clean[-1][0] - 1e-6:
+            issues.append(f"interval {i} starts before interval {i - 1}")
+        if clean and clean[-1][1] > start:
+            if clean[-1][1] - start > tolerance:
+                issues.append(f"interval {i - 1} overlaps interval {i} by {clean[-1][1] - start:.3f} s")
+            clean[-1] = (clean[-1][0], start, clean[-1][2])
+        clean.append((start, end, label))
+    return clean, issues
+
+
+def load_choco_billboard(choco_root: str | os.PathLike, drop_invalid: bool = True) -> list[BillboardTrack]:
+    """All Billboard annotations from a ChoCo checkout.
+
+    Tracks whose chord intervals are corrupt (reversed or out of order; in the current ChoCo
+    release only 0974, "Kokomo") are dropped with a warning unless ``drop_invalid`` is False.
+    """
+    import warnings
+
     root = Path(choco_root) / "partitions" / "billboard"
     tracks = []
     with open(root / "choco" / "meta.csv", newline="") as handle:
@@ -172,6 +195,10 @@ def load_choco_billboard(choco_root: str | os.PathLike) -> list[BillboardTrack]:
             for obs in chord_ann["data"]:
                 vocab.parse(obs["value"])  # validate every label up front
                 chords.append((float(obs["time"]), float(obs["time"]) + float(obs["duration"]), obs["value"]))
+            chords, issues = check_intervals(chords)
+            if issues and drop_invalid:
+                warnings.warn(f"Billboard {row['billboard_id']} skipped: {issues[0]} ({len(issues)} issues)")
+                continue
             salami = parse_salami(salami_path.read_text(encoding="utf-8", errors="replace"))
             tracks.append(BillboardTrack(
                 track_id=row["billboard_id"], title=row["track_title"].strip(),

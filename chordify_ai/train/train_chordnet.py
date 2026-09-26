@@ -51,8 +51,8 @@ def main(argv: list[str] | None = None) -> int:
 
     tracks = {t.track_id: t for t in billboard.load_choco_billboard(args.choco)}
     split = splits.read_split_file(args.split_file)
-    train_ids = split["train"][:args.songs or None]
-    val_ids = split["validation"][:args.val_songs or None]
+    train_ids = [i for i in split["train"] if i in tracks][:args.songs or None]  # corrupt tracks were dropped
+    val_ids = [i for i in split["validation"] if i in tracks][:args.val_songs or None]
     from chordify_core import vocab as vocab_module
     vocabulary = vocab_module.VOCABULARIES[args.vocabulary]
     if args.source == "billboard":
