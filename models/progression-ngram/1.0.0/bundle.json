@@ -1,0 +1,45 @@
+{
+ "id": "progression-ngram@1.0.0",
+ "role": "lm",
+ "type": "ngram-cache",
+ "files": {
+  "model": "model.json.gz",
+  "sha256": "f3c13492ab5a7a065b152cd2ffc41424281bce73677200e1ad0f9cd4902c7c17"
+ },
+ "tokens": "key-relative '<semitones above tonic>:<maj|min>'",
+ "params": {
+  "order": 4,
+  "min_count": 3,
+  "cache_weight": 0.75,
+  "max_context": 6
+ },
+ "training_data": {
+  "dataset": "mcgill-billboard (ChoCo JAMS)",
+  "split": "billboard_v1.json",
+  "split_sha256": "9e6ee255912bfb51467911ced8740dfb8309ad4733f8ef711209483dcb1e36e2",
+  "songs": 712
+ },
+ "metrics": {
+  "validation": {
+   "top1": 0.8202402957486137,
+   "top3": 0.9332255083179297,
+   "corpus_top1": 0.418322550831793,
+   "corpus_top3": 0.70771719038817,
+   "cold_top1": 0.5494350282485876,
+   "cold_top3": 0.8319209039548022,
+   "transitions": 8656,
+   "cold_transitions": 708
+  },
+  "test": {
+   "top1": 0.8105657640232108,
+   "top3": 0.9316972920696325,
+   "corpus_top1": 0.4609526112185687,
+   "corpus_top3": 0.7573742746615088,
+   "cold_top1": 0.5859154929577465,
+   "cold_top3": 0.7845070422535211,
+   "transitions": 8272,
+   "cold_transitions": 710
+  }
+ },
+ "created": "2026-09-26T15:16:32Z"
+}
