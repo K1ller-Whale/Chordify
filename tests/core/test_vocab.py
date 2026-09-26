@@ -17,7 +17,7 @@ BILLBOARD_QUALITIES = [
 
 @pytest.mark.parametrize("quality", BILLBOARD_QUALITIES)
 @pytest.mark.parametrize("root", ["C", "F#", "Bb", "Cb", "E#"])
-@pytest.mark.parametrize("bass", ["", "/3", "/b7", "/5"])
+@pytest.mark.parametrize("bass", ["", "/3", "/b7", "/5", "/b8"])
 def test_pitch_classes_match_mir_eval(root, quality, bass):
     mir_eval_chord = pytest.importorskip("mir_eval.chord")
     label = f"{root}:{quality}{bass}"
@@ -41,7 +41,7 @@ def test_root_without_quality_is_major():
     assert vocab.parse("A/3").bass == vocab.note_to_pc("C#")
 
 
-@pytest.mark.parametrize("bad", ["H:maj", "C:foo", "C:(1,3", "C:maj/12", ":min", ""])
+@pytest.mark.parametrize("bad", ["H:maj", "C:foo", "C:(1,3", "C:maj/14", ":min", ""])
 def test_malformed_labels_raise(bad):
     with pytest.raises(ValueError):
         vocab.parse(bad)

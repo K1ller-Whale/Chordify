@@ -16,7 +16,7 @@ train = ["torch>=2.2", "jams>=0.3.4", "mir_eval>=0.7", "onnx>=1.15", "onnxruntim
 dev = ["pytest>=8", "mir_eval>=0.7"]
 
 [tool.setuptools.packages.find]
-include = ["chordify_core*"]
+include = ["chordify_core*", "chordify_ai*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
