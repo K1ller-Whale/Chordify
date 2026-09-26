@@ -43,13 +43,15 @@ class FrameTargets:
 
 
 def frame_targets(n_frames: int, frame_rate: float, chords: list[tuple[float, float, str]],
-                  vocabulary: vocab.Vocabulary, keys: list[tuple[float, int | None, str | None]] | None = None
-                  ) -> FrameTargets:
+                  vocabulary: vocab.Vocabulary, keys: list[tuple[float, int | None, str | None]] | None = None,
+                  frame_offset: float | None = None) -> FrameTargets:
     """Targets for frames whose centres fall inside ``chords`` intervals (else N).
 
-    ``keys``: [(start_time, tonic_pc or None, "major"/"minor"/None), ...] in time order.
+    Frame i is centred at ``frame_offset + i / frame_rate`` (``FeatureSpec.offset``; default
+    the middle of the frame). ``keys``: [(start_time, tonic_pc or None, mode or None), ...].
     """
-    centres = (np.arange(n_frames) + 0.5) / frame_rate
+    offset = 0.5 / frame_rate if frame_offset is None else frame_offset
+    centres = offset + np.arange(n_frames) / frame_rate
     merged: list[list] = []
     for start, end, label in chords:
         if merged and merged[-1][2] == label and abs(merged[-1][1] - start) < 1e-3:

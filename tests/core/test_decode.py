@@ -124,3 +124,15 @@ def test_unit_boundaries_cover_the_whole_song():
     assert b[0] == 0.0 and b[-1] == 10.0 and np.all(np.diff(b) > 0)
     b2 = decode.unit_boundaries(2.0, np.array([0.5, 1.0, 1.5]), FPS, subdivide=2)
     assert b2.tolist() == [0.0, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+
+
+def test_frame_offset_shifts_frames_to_their_true_times():
+    # Posteriors whose frame i describes audio at 0.186 s + i / FPS (NNLS convention).
+    offset = 8192 / 44100
+    post = noisy_posteriors(["C:maj", "G:maj"], 4.0, noise=0.05, flicker=0.0)
+    beats = np.arange(0, 8.5, 0.5)
+    naive = decode.decode(post, FPS, beats=beats)
+    shifted = decode.decode(post, FPS, beats=beats, frame_offset=offset, duration=8.0 + offset)
+    assert naive[1].start == pytest.approx(4.0)
+    assert shifted[1].start == pytest.approx(4.0 + 0.0, abs=0.5) and shifted[1].start >= naive[1].start
+    assert shifted[-1].end == pytest.approx(8.0 + offset)

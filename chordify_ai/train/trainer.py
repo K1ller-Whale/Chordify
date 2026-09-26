@@ -56,7 +56,8 @@ def predict_segments(model: ChordNet, track: EvalTrack, vocabulary: vocab.Vocabu
     posteriors = acoustic.softmax(logits["chord"])
     boundary = acoustic.sigmoid(logits["boundary"])
     segments = decode.decode(posteriors, track.frame_rate, beats=np.asarray(track.beats) if track.beats else None,
-                             change_prob=boundary, prior=prior, **decoder)
+                             change_prob=boundary, prior=prior, frame_offset=track.frame_offset,
+                             duration=track.reference[-1][1] if track.reference else None, **decoder)
     return [(s.start, s.end, vocabulary.decode(s.index)) for s in segments]
 
 

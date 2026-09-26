@@ -51,10 +51,15 @@ def unit_boundaries(duration: float, beats: np.ndarray | None, frame_rate: float
     return points
 
 
-def pool(log_probs: np.ndarray, frame_rate: float, boundaries: np.ndarray) -> tuple[np.ndarray, list[slice]]:
-    """Mean log-probability per unit. Units that contain no frame centre borrow the nearest frame."""
+def pool(log_probs: np.ndarray, frame_rate: float, boundaries: np.ndarray,
+         frame_offset: float | None = None) -> tuple[np.ndarray, list[slice]]:
+    """Mean log-probability per unit. Units that contain no frame centre borrow the nearest frame.
+
+    Frame i is centred at ``frame_offset + i / frame_rate`` (default: the middle of [i, i+1) / fps).
+    """
     n_frames = log_probs.shape[0]
-    centres = (np.arange(n_frames) + 0.5) / frame_rate
+    offset = 0.5 / frame_rate if frame_offset is None else frame_offset
+    centres = offset + np.arange(n_frames) / frame_rate
     starts = np.searchsorted(centres, boundaries[:-1], side="left")
     ends = np.searchsorted(centres, boundaries[1:], side="left")
     pooled, spans = [], []
@@ -113,20 +118,25 @@ def decode(posteriors: np.ndarray, frame_rate: float, *, beats: np.ndarray | Non
            change_prob: np.ndarray | None = None, prior: np.ndarray | None = None, alpha: float = 0.5,
            self_prob: float | None = None, change_matrix: np.ndarray | None = None,
            subdivide: int = 1, min_units: int = 1, n_alternatives: int = 3,
-           boundary_weight: float = 0.5) -> list[Segment]:
+           boundary_weight: float = 0.5, frame_offset: float | None = None,
+           duration: float | None = None) -> list[Segment]:
     """Decode (T, V) frame posteriors into chord segments.
 
     ``change_prob`` (T,) is the boundary head's P(chord change at frame t). When it is
     given, each unit's stay probability pools ``1 - max(change_prob near its start)``
     with ``self_prob`` (see ``combine_stay``). ``change_matrix`` (V, V) is the transition
     prior for changes (e.g. from the progression model); uniform when omitted.
+
+    ``frame_offset`` is the centre time of frame 0 (``FeatureSpec.offset``); ``duration`` the
+    audio length (defaults to the span of the frames).
     """
     posteriors = np.asarray(posteriors, dtype=np.float64)
     n_frames, n_classes = posteriors.shape
-    duration = n_frames / frame_rate
+    if duration is None:
+        duration = n_frames / frame_rate + (0.0 if frame_offset is None else frame_offset - 0.5 / frame_rate)
     log_probs = np.log(posteriors + _EPS)
     boundaries = unit_boundaries(duration, beats, frame_rate, subdivide)
-    pooled, spans = pool(log_probs, frame_rate, boundaries)
+    pooled, spans = pool(log_probs, frame_rate, boundaries, frame_offset)
     if prior is not None:
         pooled = pooled - alpha * np.log(np.asarray(prior) + _EPS)
     units_are_frames = beats is None or len(beats) < 2
@@ -141,7 +151,7 @@ def decode(posteriors: np.ndarray, frame_rate: float, *, beats: np.ndarray | Non
     matrix = change_matrix if change_matrix is not None else uniform_change_matrix(n_classes)
     path = viterbi(pooled, stay, matrix)
     segments = _to_segments(path, boundaries, spans, posteriors, n_alternatives)
-    return merge_short(segments, boundaries, min_units, posteriors, frame_rate, n_alternatives)
+    return merge_short(segments, boundaries, min_units, posteriors, frame_rate, n_alternatives, frame_offset)
 
 
 def _segment_stats(posteriors: np.ndarray, frames: slice, index: int, n_alternatives: int):
@@ -163,7 +173,7 @@ def _to_segments(path, boundaries, spans, posteriors, n_alternatives) -> list[Se
 
 
 def merge_short(segments: list[Segment], boundaries: np.ndarray, min_units: int, posteriors: np.ndarray,
-                frame_rate: float, n_alternatives: int = 3) -> list[Segment]:
+                frame_rate: float, n_alternatives: int = 3, frame_offset: float | None = None) -> list[Segment]:
     """Absorb segments shorter than ``min_units`` units into the neighbour whose class
     has more posterior mass over the fragment."""
     if min_units <= 1 or len(segments) < 2:
@@ -172,8 +182,13 @@ def merge_short(segments: list[Segment], boundaries: np.ndarray, min_units: int,
     def n_units(seg):
         return int(np.searchsorted(boundaries, seg.end - 1e-6) - np.searchsorted(boundaries, seg.start - 1e-6))
 
+    offset = 0.5 / frame_rate if frame_offset is None else frame_offset
+    last = len(posteriors) - 1
+
     def frames(start, end):
-        return slice(int(round(start * frame_rate)), max(int(round(start * frame_rate)) + 1, int(round(end * frame_rate))))
+        first = min(last, max(0, int(round((start - offset) * frame_rate + 0.5))))
+        stop = min(last + 1, max(first + 1, int(round((end - offset) * frame_rate + 0.5))))
+        return slice(first, stop)
 
     changed = True
     while changed and len(segments) > 1:

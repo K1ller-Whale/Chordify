@@ -20,34 +20,44 @@ from .audio import resample
 NNLS_ORDER_OFFSET = 9  # NNLS bin 0 is A (pitch class 9)
 
 
+NNLS_BLOCK = 16384
+
+
 @dataclass(frozen=True)
 class FeatureSpec:
     kind: str  # "nnls_bothchroma" | "cqt_bothchroma" | "log_cqt"
     sample_rate: int
     hop: int
     n_bins: int
+    offset: float = 0.0  # time (s) at the centre of frame 0
 
     @property
     def frame_rate(self) -> float:
         return self.sample_rate / self.hop
+
+    def frame_times(self, n_frames: int) -> np.ndarray:
+        """Centre time of every frame: ``offset + i / frame_rate``."""
+        return self.offset + np.arange(n_frames, dtype=np.float64) / self.frame_rate
 
     def to_dict(self) -> dict:
         return asdict(self) | {"frame_rate": self.frame_rate}
 
     @classmethod
     def from_dict(cls, data: dict) -> "FeatureSpec":
-        return cls(data["kind"], int(data["sample_rate"]), int(data["hop"]), int(data["n_bins"]))
+        default = SPECS[data["kind"]].offset if data["kind"] in SPECS else 0.0
+        return cls(data["kind"], int(data["sample_rate"]), int(data["hop"]), int(data["n_bins"]),
+                   float(data.get("offset", default)))
 
 
 # Billboard's released features: NNLS Chroma plugin at 44.1 kHz, step 2048 (46.4 ms), block 16384.
-NNLS_BOTHCHROMA = FeatureSpec("nnls_bothchroma", 44100, 2048, 24)
+# The Vamp host stamps each frame at the centre of its 16384-sample block, so frame 0 is at 0.186 s.
+NNLS_BOTHCHROMA = FeatureSpec("nnls_bothchroma", 44100, 2048, 24, offset=NNLS_BLOCK / 2 / 44100)
 # Same frame rate and layout without the Vamp plugin (librosa CQT folded into bass/treble chroma).
+# librosa centres frame i at i * hop.
 CQT_BOTHCHROMA = FeatureSpec("cqt_bothchroma", 22050, 1024, 24)
 # v3 input: 3 bins per semitone, C1 - 6 st to C8 + 6 st, same 21.53 fps frame rate.
 LOG_CQT = FeatureSpec("log_cqt", 22050, 1024, 288)
 SPECS = {s.kind: s for s in (NNLS_BOTHCHROMA, CQT_BOTHCHROMA, LOG_CQT)}
-
-NNLS_BLOCK = 16384
 
 
 # ---------------------------------------------------------------------------
@@ -197,4 +207,4 @@ def transpose_chroma(features: np.ndarray, semitones: int) -> np.ndarray:
 
 
 def frame_times(n_frames: int, spec: FeatureSpec) -> np.ndarray:
-    return np.arange(n_frames, dtype=np.float64) / spec.frame_rate
+    return spec.frame_times(n_frames)

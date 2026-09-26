@@ -12,6 +12,11 @@ C, E, G, A = 0, 4, 7, 9
 nnls = pytest.mark.skipif(not features.nnls_available(), reason="nnls-chroma Vamp plugin not installed")
 
 
+def sustained(chords, sr):
+    """Chords whose notes barely decay, so a change is visible right up to its boundary."""
+    return np.concatenate([synth.render_chord(label, seconds, sr, decay=0.1) for label, seconds in chords])
+
+
 def top(vector, k=3):
     return set(np.argsort(vector)[::-1][:k].tolist())
 
@@ -122,3 +127,21 @@ def test_load_audio_resamples_wav_bytes():
     sf.write(buffer, y, 44100, format="WAV")
     out = audio.load_audio(buffer.getvalue(), 22050, filename="clip.wav")
     assert abs(len(out) - 22050) <= 2 and out.dtype == np.float32
+
+
+@nnls
+def test_nnls_frame_times_match_the_audio():
+    """Vamp stamps NNLS frames at block centres (frame 0 = 0.186 s); spec.frame_times must agree,
+    or every chord boundary lands early (found via the backend's beat-level decoding)."""
+    y = sustained([("C:maj", 4.0), ("F#:maj", 4.0)], 44100)
+    frames = features.extract(NNLS_BOTHCHROMA, y, 44100)[:, 12:]
+    change = np.argmax(frames[:, [6, 10, 1]].sum(1) > frames[:, [0, 4, 7]].sum(1))
+    assert NNLS_BOTHCHROMA.frame_times(len(frames))[change] == pytest.approx(4.0, abs=0.2)
+    assert NNLS_BOTHCHROMA.offset == pytest.approx(0.1858, abs=1e-4)
+
+
+def test_cqt_frame_times_match_the_audio():
+    y = sustained([("C:maj", 4.0), ("F#:maj", 4.0)], 22050)
+    frames = features.extract(CQT_BOTHCHROMA, y, 22050)[:, 12:]
+    change = np.argmax(frames[:, [6, 10, 1]].sum(1) > frames[:, [0, 4, 7]].sum(1))
+    assert CQT_BOTHCHROMA.frame_times(len(frames))[change] == pytest.approx(4.0, abs=0.25)

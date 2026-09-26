@@ -28,6 +28,7 @@ class EvalTrack:
     reference: list[tuple[float, float, str]]
     beats: list[float]
     frame_rate: float
+    frame_offset: float = 0.0
 
 
 def _keys(track: billboard.BillboardTrack) -> list[tuple[float, int | None, str | None]]:
@@ -42,11 +43,14 @@ def billboard_chroma(tracks: list[billboard.BillboardTrack], kaggle_root: str | 
         path = billboard.kaggle_chroma_path(kaggle_root, track.track_id)
         if not path.exists():
             continue
-        _, raw = features.load_billboard_bothchroma(path)
+        times, raw = features.load_billboard_bothchroma(path)
+        if len(times) > 1 and abs(np.median(np.diff(times)) - 1 / spec.frame_rate) > 1e-3:
+            raise ValueError(f"{path}: frame step {np.median(np.diff(times)):.4f} s is not NNLS_BOTHCHROMA's")
+        offset = float(times[0]) if len(times) else spec.offset  # use the file's own timestamps
         x = features.normalise_bothchroma(raw)
-        targets = frame_targets(len(x), spec.frame_rate, track.chords, vocabulary, _keys(track))
+        targets = frame_targets(len(x), spec.frame_rate, track.chords, vocabulary, _keys(track), frame_offset=offset)
         out.append(EvalTrack(TrackExample(track.track_id, x, targets, "bothchroma"), track.chords, track.beats,
-                             spec.frame_rate))
+                             spec.frame_rate, offset))
     return out
 
 
@@ -72,9 +76,9 @@ def synthetic(tracks: list[billboard.BillboardTrack], vocabulary: vocab.Vocabula
             if path:
                 np.save(path, raw.astype(np.float32))
         x = features.normalise_bothchroma(raw) if spec.kind.endswith("bothchroma") else raw
-        targets = frame_targets(len(x), spec.frame_rate, chords, vocabulary, _keys(track))
+        targets = frame_targets(len(x), spec.frame_rate, chords, vocabulary, _keys(track), frame_offset=spec.offset)
         beats = [b for b in track.beats if max_seconds is None or b < max_seconds]
         out.append(EvalTrack(TrackExample(track.track_id, x.astype(np.float32), targets,
                                           "bothchroma" if spec.kind.endswith("bothchroma") else "log_cqt"),
-                             chords, beats, spec.frame_rate))
+                             chords, beats, spec.frame_rate, spec.offset))
     return out
