@@ -1,16 +1,40 @@
-# React + Vite
+# Chordify web app
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React 19 + TypeScript + Vite. Design and behaviour follow
+[`docs/chord-progression-plan/06-frontend-visualization.md`](../docs/chord-progression-plan/06-frontend-visualization.md).
 
-Currently, two official plugins are available:
+```bash
+npm ci
+npm run dev          # http://localhost:5173, expects the API on http://localhost:8000
+npm run build        # typecheck + production build
+npm run lint
+```
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Set `VITE_API_BASE_URL` (see `.env.example`) when the API runs elsewhere.
 
-## React Compiler
+## Screens
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Route | What |
+|---|---|
+| `#/` | Upload a file or record from the microphone (recorded as WAV in the browser, so the server needs no ffmpeg for recordings); recent analyses |
+| `#/a/<id>` | Analysis: progress over Server-Sent Events, then Now playing / What comes next, timeline (chord blocks sized by duration, beat grid, waveform of the local file), circle of fifths, time per chord, repeating progressions, lead sheet |
+| `#/quick` | One chord from a short clip (the original Chordify feature, via the v1 `/predict` endpoint) |
+| `#/write` | Songwriter: type chords, get next-chord suggestions with reasons |
 
-## Expanding the ESLint configuration
+The uploaded audio stays in the browser for playback; the server keeps only the analysis.
+Opening an analysis later asks for the file again and checks it by SHA-256.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Code map
+
+```
+src/api/schema.d.ts   generated from the backend's OpenAPI document: npm run api:types
+src/api/client.ts     REST + upload progress (XHR) + SSE (EventSource)
+src/lib/clock.ts      one playback clock; React re-renders only when the chord/bar changes
+src/lib/music.ts      function colours, guitar shapes, circle of fifths, binary search
+src/lib/audio.ts      local file store, waveform peaks, AudioWorklet WAV recorder
+src/components/       NowAndNext, Timeline, Panels (circle, share, lead sheet, progress), GuitarDiagram
+src/pages/            Home, AnalysisPage, QuickChord, Songwriter
+e2e/smoke.cjs         Playwright smoke test against running servers
+```
+
+Keyboard on the analysis screen: Space play/pause, ←/→ previous/next chord, R toggles Roman numerals.

@@ -1,13 +1,15 @@
 {
   "name": "chordify-frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "tsc && vite build",
+    "typecheck": "tsc",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "api:types": "cd .. && python -c \"import json; from chordify_backend.app.main import create_app; json.dump(create_app().openapi(), open('chordify-frontend/openapi.json', 'w'), indent=1)\" && cd chordify-frontend && openapi-typescript openapi.json -o src/api/schema.d.ts"
   },
   "dependencies": {
     "react": "^19.2.0",
@@ -22,6 +24,9 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.1",
     "vite": "^7.2.4"
   }
 }
