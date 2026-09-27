@@ -86,9 +86,23 @@ The ChordNet stack is implemented and tested end to end:
 - ONNX export whose output matches PyTorch to within 1e-3 at any length;
 - windowed inference in serving.
 
-It has **not** been trained on real audio features yet. The Billboard NNLS features are on Kaggle (login required) and the McGill site, and the build environment could reach neither. Serving therefore defaults to the training-free chroma templates.
+**Real data.** `tools/get_billboard_data.sh` downloads the annotations and McGill's own feature archive (`billboard-2.0-chordino`, no login). Its CSVs stamp each frame at the *start* of its block. On every song the file has exactly our extractor's frames minus the final two, and template chords agree with the annotations best at +0.09–0.14 s rather than at 0. So CSV frame *i* is our frame *i*, centred 0.186 s after its stamp, and the loader returns centre times.
 
-What could be measured, on synthetic renders of the validation annotations (25 songs, first 90 s, each render with its own timbre and tuning within ±30 cents):
+[GuitarSet](https://zenodo.org/records/3371780) (Xi et al., 2018, CC BY 4.0) adds real recordings: 180 accompaniment takes on acoustic guitar, recorded with a microphone, with lead-sheet chords. Unlike Billboard's precomputed features, `chordify_ai.eval.guitarset` runs the whole serving path, including our own feature extraction from the audio.
+
+majmin WCSR on real music:
+
+| Model | Billboard validation (89 songs) | Billboard test (89) | GuitarSet, NNLS | GuitarSet, CQT |
+|---|---|---|---|---|
+| templates 0.1.0 (decoder untuned) | 61.1 % | 68.2 % | 65.1 % | 50.0 % |
+| templates 0.2.0 (decoder tuned on validation), **served today** | 66.4 % | 71.4 % | 66.5 % | 56.0 % |
+| ChordNet Conformer, first run stopped after 4 of up to 30 epochs (trainer's untuned decoder) | 75.6 % | not scored | not scored | — |
+
+After 4 epochs ChordNet is already 9 points above the tuned templates on the validation songs. The full run moves to a team laptop ([`chordify_ai/TRAINING.md`](../../chordify_ai/TRAINING.md)). The test split gets scored once, after the decoder has been tuned on validation.
+
+By style on GuitarSet (templates 0.2.0, NNLS): singer-songwriter 89 %, rock 85 %, bossa nova 59 %, jazz 46 %, funk 44 %. Quiet, jazzy comping is where a trained model has to earn its keep.
+
+**Synthetic renders** of the validation annotations (25 songs, first 90 s, each render with its own timbre and tuning within ±30 cents), measured with the 0.1.0 template settings:
 
 | Model | Features | majmin | sevenths | seg |
 |---|---|---|---|---|
@@ -126,15 +140,8 @@ The phase 1 budget is p95 ≤ 20 s for a 4-minute song. Switching features from 
 
 ## 5. Next steps, in order
 
-1. **Real features.** Download the Billboard NNLS features (Kaggle `jacobvs/mcgill-billboard`, or McGill's `billboard-2.0-chordino` archive), then:
-   ```bash
-   python -m chordify_ai.train.train_chordnet --source billboard --choco CHOCO --kaggle KAGGLE \
-       --features nnls_bothchroma --encoder bigru --out runs/small --export models/chordnet-chroma/2.0.0
-   python -m chordify_ai.eval.evaluate_model --choco CHOCO --kaggle KAGGLE --split test \
-       --model models/chordnet-chroma/2.0.0
-   ```
-   Start with the BiGRU (`small`) as the sanity check, then the Conformer (`base`, the default encoder). When a bundle beats the templates on the test split, point `CHORDIFY_CHORD_MODEL` at it.
-2. **Baselines for the gate.** Chordino (`nnls-chroma:chordino`, built by `tools/install_nnls_chroma.sh`) takes audio, and Billboard ships only features. So on Billboard the like-for-like baseline is the template model through the same decoder (`evaluate_model --model templates --kaggle …`); Chordino proper runs on the Chordify-Live audio from step 3.
+1. **Train ChordNet on the full Billboard set.** Follow [`chordify_ai/TRAINING.md`](../../chordify_ai/TRAINING.md): setup, one-command download, training on an Apple-silicon Mac (GPU), Linux or NVIDIA, then decoder tuning on validation and a single test score. Ship the bundle only if it beats the templates' 71.4 % on the test songs; the server then picks it up by itself (`CHORDIFY_CHORD_MODEL=auto`). Then run `chordify_ai.eval.guitarset` for the real-audio check.
+2. **Baselines for the gate.** Chordino (`nnls-chroma:chordino`, built by `tools/install_nnls_chroma.sh`) takes audio, and Billboard ships only features. So on Billboard the like-for-like baseline is the template model through the same decoder (`evaluate_model --model templates --chroma …`, [§3.4](#34-acoustic-model)); Chordino proper runs on GuitarSet and the Chordify-Live audio from step 3.
 3. **Chordify-Live.** Record and label the phone/guitar test set ([02 §5](02-datasets.md)): the only in-domain measure for the Quick chord screen.
 4. **ProgressionLM.** Ingest Chordonomicon + ChoCo symbolic, train the Transformer, and gate it against [§3.3](#33-progression-model-the-gate-progressionlm-has-to-beat).
 5. **Sevenths and inversions in serving** (vocabulary and bass head already exist), local keys, sections.

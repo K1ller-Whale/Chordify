@@ -8,7 +8,7 @@ Today Chordify recognises **one chord per clip**. This plan takes it to:
 
 It covers the datasets (including an assessment of the Billboard dataset v1 was trained on), the model architecture, the software architecture and the communication between the web/Android clients, the backend and the models.
 
-> **Status:** phases 0–2 are largely built (core library, ChordNet training stack, v2 API, new web app). ChordNet still needs training on real Billboard features. See [08 · Implementation status](08-implementation-status.md).
+> **Status:** phases 0–2 are largely built (core library, ChordNet training stack, v2 API, new web app). On real Billboard songs the served template model scores 66.4 % (validation) / 71.4 % (test); a first ChordNet run reached 75.6 % on validation after 4 epochs, and the full run is documented in [`chordify_ai/TRAINING.md`](../../chordify_ai/TRAINING.md). See [08 · Implementation status](08-implementation-status.md).
 
 ## Documents
 
