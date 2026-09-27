@@ -1,6 +1,6 @@
 # chordify_ai
 
-Training and research code. Shared runtime code (features, vocabularies, decoding,
+Training and research code. **To train the chord model, follow [TRAINING.md](TRAINING.md).** Shared runtime code (features, vocabularies, decoding,
 theory) lives in [`chordify_core`](../chordify_core) and is imported from there, so
 training and serving cannot drift apart.
 
@@ -9,6 +9,7 @@ training and serving cannot drift apart.
 | `data/billboard.py` | McGill Billboard ingestion (ChoCo JAMS + `salami_chords.txt`; Kaggle `bothchroma.csv`) |
 | `data/splits.py`, `data/make_splits.py` | Frozen artist-grouped splits → [`data/splits/billboard_v1.json`](../data/splits/billboard_v1.json) |
 | `eval/chords.py` | mir_eval WCSR + segmentation, duration-weighted corpus scores, `.lab` CLI |
+| `eval/evaluate_model.py`, `eval/guitarset.py`, `eval/tune_decoder.py` | Score any serving model on Billboard (features) or GuitarSet (real recordings); tune its decoder on validation |
 | `lm/` | Progression model training/evaluation (n-gram + song cache baseline) |
 | `models/`, `train/`, `export/` | ChordNet (PyTorch), training loop, ONNX export + model bundles |
 
