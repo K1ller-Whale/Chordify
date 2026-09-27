@@ -148,7 +148,9 @@ def roman(label: str, key: Key, with_quality: bool = False) -> str | None:
         return None
     secondary = secondary_dominant(label, key)
     if secondary:
-        return secondary
+        suffix = _quality_suffix(chord) if with_quality else ""
+        head, _, target = secondary.partition("/")
+        return f"{head}{suffix}/{target}" if suffix else secondary
     offset = (chord.root - key.tonic) % 12
     numeral = _DEGREE_NAMES[key.mode][offset]
     kind = vocab.triad(chord)
@@ -164,15 +166,19 @@ def roman(label: str, key: Key, with_quality: bool = False) -> str | None:
 
 
 def _quality_suffix(chord: vocab.Chord) -> str:
+    """What follows the numeral: 7, maj7, 6, sus4, ø7 / °7 (the ø/° is already on the numeral),
+    (maj7) for a minor-major seventh."""
     kind, seventh = vocab.triad(chord), chord.seventh
     if kind in ("sus2", "sus4"):
         return ("7" if seventh == "min" else "") + kind
-    if seventh == "min" and kind not in ("dim",):
+    if kind == "min" and seventh == "maj":
+        return "(maj7)"
+    if seventh in ("min", "dim"):
         return "7"
     if seventh == "maj":
         return "maj7"
-    if seventh == "dim":
-        return "7"
+    if kind in ("maj", "min") and chord.has_sixth:
+        return "6"
     return ""
 
 
@@ -242,7 +248,10 @@ def borrowed_from(label: str, key: Key) -> str | None:
 
 
 def describe(label: str, key: Key) -> dict:
-    return {"roman": roman(label, key), "function": function(label, key), "scale_hint": scale_hint(label, key),
+    """What the analysis shows for a chord. ``roman`` names the chord type (V7, IVmaj7, viiø7);
+    ``roman_triad`` is the bare numeral that progression patterns are matched on."""
+    return {"roman": roman(label, key, with_quality=True), "roman_triad": roman(label, key),
+            "function": function(label, key), "scale_hint": scale_hint(label, key),
             "borrowed_from": borrowed_from(label, key), "secondary": secondary_dominant(label, key)}
 
 

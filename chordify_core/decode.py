@@ -12,6 +12,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from . import vocab
+
 _EPS = 1e-9
 
 
@@ -26,6 +28,23 @@ class Segment:
     @property
     def duration(self) -> float:
         return self.end - self.start
+
+
+def mean_over(posteriors: np.ndarray, frame_times: np.ndarray, start: float, end: float) -> np.ndarray:
+    """Mean of the frames whose centres fall in [start, end); the nearest frame when none does."""
+    inside = (frame_times >= start) & (frame_times < end)
+    if inside.any():
+        return posteriors[inside].mean(axis=0)
+    return posteriors[int(np.argmin(np.abs(frame_times - (start + end) / 2)))]
+
+
+def inversion(label: str, bass_probs: np.ndarray, threshold: float) -> str:
+    """Add a slash bass from the bass head (12 pitch classes + 'none'): when its most likely
+    note is a chord tone other than the root with probability >= ``threshold``."""
+    pc = int(np.argmax(bass_probs[:12]))
+    if bass_probs[pc] < threshold:
+        return label
+    return vocab.with_bass(label, pc)
 
 
 def unit_boundaries(duration: float, beats: np.ndarray | None, frame_rate: float,

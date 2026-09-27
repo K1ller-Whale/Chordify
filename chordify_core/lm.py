@@ -148,9 +148,14 @@ class NgramProgressionModel:
         return [Candidate(t, p, cache.get(t, 0)) for t, p in ranked]
 
     # -- decoder prior -----------------------------------------------------------
-    def change_matrix(self, vocabulary: vocab.Vocabulary, key: Key) -> np.ndarray:
+    def change_matrix(self, vocabulary: vocab.Vocabulary, key: Key, same_token_share: float = 0.05) -> np.ndarray:
         """(V, V) chord-change probabilities for the decoder: bigram corpus statistics in
-        ``key``, shared equally among classes with the same token; zero diagonal."""
+        ``key``, shared equally among classes with the same token; zero diagonal.
+
+        Tokens are key-relative root + major/minor family, so C -> C7 or Cmaj7 -> C6 is no
+        change for the n-gram. In larger vocabularies those same-token changes get
+        ``same_token_share`` of each row (5 % of Billboard's chord changes keep the root and
+        family and only change the chord type)."""
         labels = vocabulary.labels
         tokens = [token(label, key) if label != vocab.NO_CHORD else None for label in labels]
         per_token = Counter(t for t in tokens if t)
@@ -165,6 +170,11 @@ class NgramProgressionModel:
                     matrix[i, j] = 0.02 if tj is None else dist.get(tj, 1e-3) / per_token[tj]
             matrix[i, i] = 0.0
             matrix[i] /= matrix[i].sum()
+            same = [j for j, tj in enumerate(tokens) if ti is not None and tj == ti and j != i]
+            if same:
+                others = [j for j in range(size) if j != i and j not in same]
+                matrix[i, others] *= (1 - same_token_share) / matrix[i, others].sum()
+                matrix[i, same] = same_token_share / len(same)
         return matrix
 
 
