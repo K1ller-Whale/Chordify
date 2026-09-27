@@ -10,8 +10,11 @@ there; if it fails, step 4 shows the one-flag fallback to the CPU.
 
 ## 1. One-time setup (about 10 minutes)
 
-You need `git` and Python 3.11 or 3.12 (on a Mac: `brew install python@3.11`). The
-`git checkout` line is only needed until PR #1 is merged into `main`.
+You need `git` and Python 3.11 or 3.12 (on a Mac: `brew install python@3.11`). Use
+`python3.11` by name: on a Mac, plain `python3` is often Xcode's Python 3.9, which can
+train but cannot run the server. After `source .venv/bin/activate`, `python --version`
+should print 3.11 or 3.12. The `git checkout` line is only needed until PR #1 is merged
+into `main`.
 
 ```bash
 git clone https://github.com/K1ller-Whale/Chordify.git
