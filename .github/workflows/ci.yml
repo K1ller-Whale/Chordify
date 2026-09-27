@@ -20,10 +20,10 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel numpy
           pip install -r chordify_backend/requirements.txt pytest httpx mir_eval
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-          pip install onnx
-      - name: Build the NNLS Chroma Vamp plugin (Billboard-compatible features)
+          pip install onnx pretty_midi
+      - name: Build the NNLS Chroma plugin, install FluidSynth and ffmpeg
         run: |
-          sudo apt-get update -q && sudo apt-get install -y -q libboost-dev
+          sudo apt-get update -q && sudo apt-get install -y -q libboost-dev fluidsynth fluid-soundfont-gm ffmpeg
           pip install --no-build-isolation vamp
           bash tools/install_nnls_chroma.sh
           python -c "from chordify_core.features import nnls_available; assert nnls_available()"
