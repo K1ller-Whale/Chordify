@@ -1,8 +1,9 @@
+import numpy as np
 import pytest
 
 from chordify_ai.eval import chords as ev
 
-pytest.importorskip("mir_eval")
+mir_eval = pytest.importorskip("mir_eval")
 
 REF = [(0.0, 1.0, "N"), (1.0, 3.0, "C:maj"), (3.0, 5.0, "G:7"), (5.0, 7.0, "A:min7"), (7.0, 9.0, "F:maj/3")]
 
@@ -33,6 +34,22 @@ def test_estimate_is_padded_to_reference_span():
     est = [(1.0, 5.0, "C:maj")]
     scores = ev.evaluate_track(REF, est)
     assert 0 <= scores["root"] < 1
+
+
+def test_each_level_is_weighted_by_the_time_it_can_compare():
+    # track 2: 5 s of sus4 (majmin cannot compare it) and 5 s of G read as Am
+    rows = [ev.evaluate_track([(0.0, 10.0, "C:maj")], [(0.0, 10.0, "C:maj")]),
+            ev.evaluate_track([(0.0, 5.0, "C:sus4"), (5.0, 10.0, "G:maj")], [(0.0, 10.0, "A:min")]),
+            ev.evaluate_track([(0.0, 10.0, "X")], [(0.0, 10.0, "C:maj")])]
+    assert rows[1]["majmin"] == 0.0 and rows[1]["comparable"]["majmin"] == pytest.approx(5.0)
+    assert np.isnan(rows[2]["majmin"])  # nothing to compare: left out, not scored 0
+    agg = ev.aggregate(rows)
+    assert agg["majmin"] == pytest.approx(10 / 15)  # correct seconds / comparable seconds
+    assert agg["seg"] == pytest.approx(np.mean([r["seg"] for r in rows]))  # segmentation: by duration
+    expected = mir_eval.chord.evaluate(np.array([[0.0, 5.0], [5.0, 10.0]]), ["C:sus4", "G:maj"],
+                                       np.array([[0.0, 10.0]]), ["A:min"])
+    for key in ev.LEVELS + ev.SEGMENTATION:  # per track, the same numbers as mir_eval's own evaluate
+        assert rows[1][key] == pytest.approx(expected[key])
 
 
 def test_aggregate_is_duration_weighted():

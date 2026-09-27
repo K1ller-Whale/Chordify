@@ -53,9 +53,23 @@ def evaluate_track(reference: Sequence[Interval], estimate: Sequence[Interval]) 
         est_int, est_lab = np.array([[lo, hi]]), ["N"]
     est_int, est_lab = mir_eval.util.adjust_intervals(est_int, est_lab, lo, hi,
                                                       mir_eval.chord.NO_CHORD, mir_eval.chord.NO_CHORD)
-    scores = mir_eval.chord.evaluate(ref_int, ref_lab, est_int, est_lab)
-    scores["duration"] = float(ref_int.max() - ref_int.min())
-    out = {k: float(v) for k, v in scores.items() if k in LEVELS + SEGMENTATION + ("duration",)}
+    out: dict = {"duration": float(ref_int.max() - ref_int.min()), "comparable": {}}
+    # Each level scores only the time it can compare (majmin skips sus4, X is never scored).
+    # Keep that time so aggregate() weights by it, as MIREX's WCSR does.
+    intervals, ref_m, est_m = mir_eval.util.merge_labeled_intervals(ref_int, ref_lab, est_int, est_lab)
+    durations = mir_eval.util.intervals_to_durations(intervals)
+    for level in LEVELS:
+        comparison = np.asarray(getattr(mir_eval.chord, level)(ref_m, est_m), dtype=np.float64)
+        scored = comparison >= 0
+        seconds = float(durations[scored].sum())
+        out[level] = float(durations[scored] @ comparison[scored] / seconds) if seconds > 0 else float("nan")
+        out["comparable"][level] = seconds
+    # as mir_eval.chord.evaluate: repeated chords are merged first (mir_eval >= 0.8)
+    merge = getattr(mir_eval.chord, "merge_chord_intervals", lambda intervals, _: intervals)
+    ref_seg, est_seg = merge(ref_int, ref_lab), merge(est_int, est_lab)
+    out["overseg"] = float(mir_eval.chord.overseg(ref_seg, est_seg))
+    out["underseg"] = float(mir_eval.chord.underseg(ref_seg, est_seg))
+    out["seg"] = min(out["overseg"], out["underseg"])
     out["qualities"] = quality_breakdown(ref_int, ref_lab, est_int, est_lab)
     return out
 
@@ -108,14 +122,16 @@ def quality_breakdown(ref_int: np.ndarray, ref_lab: list[str], est_int: np.ndarr
 
 
 def aggregate(per_track: Iterable[dict]) -> dict:
-    """Duration-weighted means (WCSR), the number of tracks, the large-vocabulary exact-match
-    rate and its per-chord-type breakdown (recall, share of the reference time, confusions)."""
+    """WCSR per level (correct time over the time the level can compare, summed over tracks,
+    so a track with nothing comparable at a level is left out of it), duration-weighted
+    segmentation, the number of tracks, the large-vocabulary exact-match rate and its
+    per-chord-type breakdown (recall, share of the reference time, confusions)."""
     rows = list(per_track)
-    weights = np.array([r["duration"] for r in rows])
     out: dict = {"tracks": float(len(rows))}
     for key in LEVELS + SEGMENTATION:
-        values = np.array([r[key] for r in rows])
-        valid = ~np.isnan(values)
+        values = np.array([r[key] for r in rows], dtype=np.float64)
+        weights = np.array([r.get("comparable", {}).get(key, r["duration"]) for r in rows], dtype=np.float64)
+        valid = ~np.isnan(values) & (weights > 0)
         out[key] = float(np.average(values[valid], weights=weights[valid])) if valid.any() else float("nan")
     totals: dict[str, Counter] = defaultdict(Counter)
     for row in rows:
