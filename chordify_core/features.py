@@ -97,7 +97,11 @@ def nnls_bothchroma(y: np.ndarray, sr: int) -> np.ndarray:
 def load_billboard_bothchroma(path: str | os.PathLike) -> tuple[np.ndarray, np.ndarray]:
     """Read a Billboard ``bothchroma.csv`` (filename, time, 12 bass, 12 treble; A-based).
 
-    Returns ``(times, features)`` with C-ordered features.
+    Returns ``(times, features)`` with C-ordered features and ``times`` at frame centres.
+    The CSVs stamp each frame at the *start* of its 16,384-sample block (the older Vamp
+    SDK convention): frame 0 is at 0.000 s, yet covers 0-0.37 s. Every file has exactly
+    our extractor's frames for the same audio minus the last two, so frame i here is
+    frame i of ``nnls_bothchroma``, centred ``NNLS_BOTHCHROMA.offset`` later.
     """
     import csv
 
@@ -108,7 +112,8 @@ def load_billboard_bothchroma(path: str | os.PathLike) -> tuple[np.ndarray, np.n
                 continue
             times.append(float(row[1]))
             rows.append([float(v) for v in row[2:26]])
-    return np.asarray(times, dtype=np.float64), nnls_to_c_order(np.asarray(rows, dtype=np.float32))
+    centres = np.asarray(times, dtype=np.float64) + NNLS_BOTHCHROMA.offset
+    return centres, nnls_to_c_order(np.asarray(rows, dtype=np.float32))
 
 
 # ---------------------------------------------------------------------------

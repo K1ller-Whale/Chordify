@@ -59,7 +59,7 @@ def test_billboard_csv_loader(tmp_path):
     path = tmp_path / "bothchroma.csv"
     path.write_text(",".join(row) + "\n")
     times, frames = features.load_billboard_bothchroma(path)
-    assert times.tolist() == [pytest.approx(0.0464)]
+    assert times.tolist() == [pytest.approx(0.0464 + NNLS_BOTHCHROMA.offset)]  # block start -> centre
     assert frames[0, C] == 2.5 and frames[0, 12 + E] == 1.0
 
 

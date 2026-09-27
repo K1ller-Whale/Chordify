@@ -35,18 +35,18 @@ def _keys(track: billboard.BillboardTrack) -> list[tuple[float, int | None, str 
     return [(t, vocab.note_to_pc(tonic), None) for t, tonic in track.tonics]
 
 
-def billboard_chroma(tracks: list[billboard.BillboardTrack], kaggle_root: str | Path,
+def billboard_chroma(tracks: list[billboard.BillboardTrack], features_root: str | Path,
                      vocabulary: vocab.Vocabulary) -> list[EvalTrack]:
     spec = features.NNLS_BOTHCHROMA
     out = []
     for track in tracks:
-        path = billboard.kaggle_chroma_path(kaggle_root, track.track_id)
+        path = billboard.chroma_path(features_root, track.track_id)
         if not path.exists():
             continue
         times, raw = features.load_billboard_bothchroma(path)
         if len(times) > 1 and abs(np.median(np.diff(times)) - 1 / spec.frame_rate) > 1e-3:
             raise ValueError(f"{path}: frame step {np.median(np.diff(times)):.4f} s is not NNLS_BOTHCHROMA's")
-        offset = float(times[0]) if len(times) else spec.offset  # use the file's own timestamps
+        offset = float(times[0]) if len(times) else spec.offset  # frame-centre time of the first frame
         x = features.normalise_bothchroma(raw)
         targets = frame_targets(len(x), spec.frame_rate, track.chords, vocabulary, _keys(track), frame_offset=offset)
         out.append(EvalTrack(TrackExample(track.track_id, x, targets, "bothchroma"), track.chords, track.beats,

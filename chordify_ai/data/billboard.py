@@ -219,5 +219,12 @@ def load_tracks(path: str | os.PathLike) -> list[BillboardTrack]:
         return [BillboardTrack.from_dict(d) for d in json.load(handle)]
 
 
-def kaggle_chroma_path(kaggle_root: str | os.PathLike, track_id: str) -> Path:
-    return Path(kaggle_root) / "metadata" / "metadata" / track_id / "bothchroma.csv"
+def chroma_path(features_root: str | os.PathLike, track_id: str) -> Path:
+    """A track's ``bothchroma.csv`` in the McGill archive (``billboard-2.0-chordino``,
+    extracted: ``McGill-Billboard/<id>/``) or the Kaggle mirror (``metadata/metadata/<id>/``)."""
+    root = Path(features_root)
+    candidates = [root / "McGill-Billboard" / track_id, root / "metadata" / "metadata" / track_id, root / track_id]
+    for folder in candidates:
+        if (folder / "bothchroma.csv").exists():
+            return folder / "bothchroma.csv"
+    return candidates[0] / "bothchroma.csv"

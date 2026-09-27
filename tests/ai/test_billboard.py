@@ -126,3 +126,12 @@ def test_loader_drops_corrupt_tracks(tmp_path):
         tracks = billboard.load_choco_billboard(root)
     assert [t.track_id for t in tracks] == ["0001"]
     assert len(billboard.load_choco_billboard(root, drop_invalid=False)) == 2
+
+
+def test_chroma_path_finds_the_mcgill_and_kaggle_layouts(tmp_path):
+    for parts in (("McGill-Billboard", "0003"), ("metadata", "metadata", "0004")):
+        folder = tmp_path.joinpath(*parts)
+        folder.mkdir(parents=True)
+        (folder / "bothchroma.csv").write_text("")
+    assert billboard.chroma_path(tmp_path, "0003") == tmp_path / "McGill-Billboard" / "0003" / "bothchroma.csv"
+    assert billboard.chroma_path(tmp_path, "0004") == tmp_path / "metadata" / "metadata" / "0004" / "bothchroma.csv"

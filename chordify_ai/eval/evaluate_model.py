@@ -5,7 +5,7 @@ ChordNet bundle. Each model extracts its *own* FeatureSpec, exactly as in servin
 
     python -m chordify_ai.eval.evaluate_model --choco CHOCO --model templates --synthetic --songs 25
     python -m chordify_ai.eval.evaluate_model --choco CHOCO --model models/chordnet-chroma/2.0.0 \\
-        --kaggle KAGGLE --split test          # real Billboard NNLS chroma (needs the Kaggle download)
+        --chroma FEATURES --split test        # real Billboard NNLS chroma (McGill archive or Kaggle)
 """
 from __future__ import annotations
 
@@ -36,13 +36,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--split", default="validation", choices=["train", "validation", "test"])
     parser.add_argument("--split-file", default=str(splits.DEFAULT_SPLIT_FILE))
     parser.add_argument("--synthetic", action="store_true", help="render the annotations with the synthesiser")
-    parser.add_argument("--kaggle", help="Billboard NNLS features (real audio features) instead of --synthetic")
+    parser.add_argument("--chroma", "--kaggle", dest="chroma",
+                        help="Billboard NNLS features (McGill archive or Kaggle mirror) instead of --synthetic")
     parser.add_argument("--songs", type=int, default=0)
     parser.add_argument("--max-seconds", type=float, default=90.0)
     parser.add_argument("--seed", type=int, default=2)
     args = parser.parse_args(argv)
-    if not args.synthetic and not args.kaggle:
-        parser.error("choose --synthetic or --kaggle")
+    if not args.synthetic and not args.chroma:
+        parser.error("choose --synthetic or --chroma")
 
     model = acoustic.load_acoustic_model(args.model)
     spec = model.feature_spec
@@ -60,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             if spec.kind != "nnls_bothchroma":
                 parser.error("Billboard features are NNLS bothchroma; this model uses " + spec.kind)
-            path = billboard.kaggle_chroma_path(args.kaggle, track_id)
+            path = billboard.chroma_path(args.chroma, track_id)
             if not path.exists():
                 continue
             _, raw = features.load_billboard_bothchroma(path)

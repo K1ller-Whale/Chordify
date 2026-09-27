@@ -1,7 +1,8 @@
 """Train ChordNet and optionally export a model bundle.
 
-Real training (ChordNet-Chroma v2, needs the Kaggle Billboard features):
-    python -m chordify_ai.train.train_chordnet --source billboard --choco CHOCO --kaggle KAGGLE \\
+Real training (ChordNet-Chroma v2, needs the Billboard NNLS features: McGill's
+billboard-2.0-chordino archive, extracted, or the Kaggle mirror):
+    python -m chordify_ai.train.train_chordnet --source billboard --choco CHOCO --chroma FEATURES \\
         --out runs/chordnet-chroma --export models/chordnet-chroma/2.0.0
 
 Synthetic pre-training / smoke run (no downloads beyond ChoCo):
@@ -28,7 +29,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--source", choices=["billboard", "synthetic"], required=True)
     parser.add_argument("--choco", required=True)
-    parser.add_argument("--kaggle", help="root of the Kaggle mcgill-billboard download (billboard source)")
+    parser.add_argument("--chroma", "--kaggle", dest="chroma",
+                        help="Billboard NNLS features: the extracted McGill billboard-2.0-chordino archive "
+                             "or the Kaggle mcgill-billboard download (billboard source)")
     parser.add_argument("--split-file", default=str(splits.DEFAULT_SPLIT_FILE))
     parser.add_argument("--features", default="cqt_bothchroma", choices=sorted(features.SPECS),
                         help="synthetic source only; billboard always uses nnls_bothchroma")
@@ -57,11 +60,11 @@ def main(argv: list[str] | None = None) -> int:
     from chordify_core import vocab as vocab_module
     vocabulary = vocab_module.VOCABULARIES[args.vocabulary]
     if args.source == "billboard":
-        if not args.kaggle:
-            parser.error("--kaggle is required for --source billboard")
+        if not args.chroma:
+            parser.error("--chroma is required for --source billboard")
         spec = features.NNLS_BOTHCHROMA
-        train_tracks = sources.billboard_chroma([tracks[i] for i in train_ids], args.kaggle, vocabulary)
-        val_tracks = sources.billboard_chroma([tracks[i] for i in val_ids], args.kaggle, vocabulary)
+        train_tracks = sources.billboard_chroma([tracks[i] for i in train_ids], args.chroma, vocabulary)
+        val_tracks = sources.billboard_chroma([tracks[i] for i in val_ids], args.chroma, vocabulary)
     else:
         spec = features.SPECS[args.features]
         train_tracks = sources.synthetic([tracks[i] for i in train_ids], vocabulary, spec, args.cache, seed=1,
