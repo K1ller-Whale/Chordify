@@ -72,8 +72,9 @@ The template model scores 66.4 % on the same songs.
 
 Reference run (`chordnet-chroma@2.0.0`, MacBook with an M5 Pro, Apple GPU): 42 s per
 epoch, 68.4 % after epoch 1, best 79.5 % at epoch 11, early stop at epoch 17, about
-12 minutes in all. After step 5: 81.4 % on validation; step 6: 80.5 % on test. The same
-run on 3 cloud CPU cores took about 7 minutes per epoch.
+12 minutes in all. After step 5: 81.4 % on validation; step 6: 80.5 % on test (81.8 % and
+81.3 % with the standard scoring the evaluation uses since 3.0.0). The same run on 3 cloud
+CPU cores took about 7 minutes per epoch.
 
 Training runs up to 30 epochs and stops early once 6 epochs pass without improvement.
 Multiply the seconds of your first epoch by about 20 for a rough total. Pressing Ctrl-C
@@ -102,7 +103,7 @@ python -m chordify_ai.eval.evaluate_model \
     --model models/chordnet-chroma/2.0.0 --split test
 ```
 
-Compare `majmin` with the template model on the same 89 test songs: **0.714**. Only ship
+Compare `majmin` with the template model on the same 89 test songs: **0.719**. Only ship
 the new model if it is higher. Do not re-tune after looking at the test score; that would
 make the number meaningless.
 
@@ -131,6 +132,10 @@ can show. It has 14 types on each of the 12 roots, plus "no chord", 169 classes 
 | diminished, augmented | Cdim, Caug | dim7, half-diminished | Cdim7, Cm7b5 |
 | 6, m6 | C6, Cm6 | minor-major 7 | Cm(maj7) |
 | sus2, sus4 | Csus2, Csus4 | inversions | C/E, G7/B (from the bass head) |
+
+`chordnet-chroma@3.0.0`, the model the app serves, was trained with exactly the steps below.
+To train a new version, use a new number (say 3.1.0) in every command, so the shipped model
+is not overwritten.
 
 Billboard alone cannot teach this. In its 711 training songs, diminished sevenths, minor-major
 sevenths and augmented chords together make up less than half a percent of the time, and
@@ -187,7 +192,7 @@ It should print one line per source (`billboard: 40 songs`, `guitarset: 120 song
 `pop909: 10 songs`, `generated: 20 songs`), then `on mps` and one epoch line. The scores
 mean nothing yet.
 
-## 10. Full training (about 1.5 hours on a MacBook Pro)
+## 10. Full training (about 35 minutes of training on an M5 Pro, after the first run's rendering)
 
 ```bash
 PYTORCH_ENABLE_MPS_FALLBACK=1 caffeinate -i \
@@ -204,12 +209,14 @@ python -m chordify_ai.train.train_chordnet \
 The first run renders the POP909 and generated songs to audio and extracts their features,
 using every CPU core but one. On a laptop that takes roughly 15–30 minutes, and
 `data/cache/` keeps the results, so later runs start training right away. Then each epoch
-prints a line like this one, from a short 4-epoch rehearsal on 3 CPU cores (your epochs will
-be much faster and, after more of them, score higher):
+prints a line like this one:
 
 ```
-epoch   4  chord loss 3.153  boundary 0.722  val majmin 69.0  large 44.7  seg 62.9  (419.1 s)
+epoch  22  chord loss 2.421  boundary 0.532  val majmin 77.6  large 59.4  seg 70.0  (71.7 s)
 ```
+
+That is the epoch 3.0.0 kept. Its reference run on a MacBook with an M5 Pro took 72 s per
+epoch, reached 67.7 % `val majmin` after epoch 1 and stopped early at epoch 28.
 
 - `val majmin` is scored on Billboard's and GuitarSet's validation songs together, so it is
   lower than the 79.5 % of step 4, which used Billboard's alone. Compare 3.0.0 with 2.0.0 in
@@ -245,17 +252,18 @@ python -m chordify_ai.eval.guitarset --root data/raw/guitarset \
 
 The first command scores the 89 Billboard test songs, the second the 30 GuitarSet takes of
 player 05, whom training never heard. Each prints the scores from `root` to `tetrads_inv`,
-then one line per chord type with its recall and what it is mistaken for most. Here is where
-2.0.0 stands:
+then one line per chord type with its recall and what it is mistaken for most. The numbers
+to beat:
 
-| Test set | majmin | sevenths | tetrads | large | types other than maj/min recognised |
+| Test set | Model | majmin | sevenths | tetrads | large |
 |---|---|---|---|---|---|
-| Billboard test, 2.0.0 | 80.5 % | 61.6 % | 55.8 % | 59.5 % | none |
-| GuitarSet player 05 (performed), 2.0.0 | 69.6 % | 47.3 % | 38.2 % | 42.7 % | none |
+| Billboard test | 2.0.0 (major/minor only) | 81.3 % | 62.4 % | 55.8 % | 59.5 % |
+| Billboard test | **3.0.0, shipped** | **82.3 %** | **71.0 %** | **63.6 %** | **67.9 %** |
+| GuitarSet player 05, as played | 2.0.0 | 78.6 % | 67.0 % | 38.2 % | 42.7 % |
+| GuitarSet player 05, as played | **3.0.0, shipped** | **80.9 %** | **85.9 %** | **52.3 %** | **71.3 %** |
 
-Ship 3.0.0 if `majmin` on Billboard test stays within about a point of 80.5 % while
-`sevenths`, `tetrads` and `large` go up. That trade is the point of this model. As in step
-6, do not re-tune after looking at test scores.
+Ship a new model only if it beats the shipped one on Billboard test `majmin` and `large`
+without losing on GuitarSet. As in step 6, do not re-tune after looking at test scores.
 
 ## 13. Ship it
 
@@ -265,6 +273,6 @@ git commit -m "Add ChordNet-Chroma 3.0.0 with every chord type"
 git push origin claude/large-vocabulary-chords
 ```
 
-Then tell Claude it is pushed. Claude checks the numbers, makes 3.0.0 the default model,
+Then tell Claude it is pushed. Claude checks the numbers, makes it the default model,
 updates the docs and gets CI green. Anyone who prefers plain chords can still pick "Major and
 minor" in the app. It uses the same model and simplifies its chords.

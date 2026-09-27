@@ -1,11 +1,12 @@
 """Train ChordNet and optionally export a model bundle.
 
-Large-vocabulary model (every chord type; see chordify_ai/TRAINING.md): Billboard's NNLS
-features plus GuitarSet recordings, rendered POP909 arrangements and generated songs with
-balanced chord types, all through the same NNLS extractor the server uses:
+Large-vocabulary model (every chord type; how chordnet-chroma@3.0.0 was trained, see
+chordify_ai/TRAINING.md): Billboard's NNLS features plus GuitarSet recordings, rendered POP909
+arrangements and generated songs with balanced chord types, all through the same NNLS
+extractor the server uses:
     python -m chordify_ai.train.train_chordnet --source billboard,guitarset,pop909,generated \\
         --vocabulary large --choco CHOCO --chroma FEATURES --guitarset GUITARSET --pop909 POP909 \\
-        --out runs/chordnet-large --export models/chordnet-chroma/3.0.0
+        --items 4000 --epochs 40 --out runs/chordnet-large --export models/chordnet-chroma/3.0.0
 
 Billboard only, major/minor (how chordnet-chroma@2.0.0 was trained):
     python -m chordify_ai.train.train_chordnet --source billboard --choco CHOCO --chroma FEATURES \\

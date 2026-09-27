@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     min_duration_s: float = 1.0
     decode_sample_rate: int = 44100
     chord_model: str = "auto"  # "auto", "templates" or a ChordNet bundle directory
-    default_chord_bundle: str = str(REPO_ROOT / "models" / "chordnet-chroma" / "2.0.0")
+    default_chord_bundle: str = str(REPO_ROOT / "models" / "chordnet-chroma" / "3.0.0")
     lm_model: str = str(REPO_ROOT / "models" / "progression-ngram" / "1.0.0")
     workers: int = 2
     data_dir: str = str(REPO_ROOT / "chordify_backend" / "var")

@@ -36,7 +36,7 @@ chroma, and `GET /api/v2/models` shows which model is active.
 | Variable | Default | Meaning |
 |---|---|---|
 | `CHORDIFY_ALLOWED_ORIGINS` | `["http://localhost:5173","http://127.0.0.1:5173"]` | CORS allow-list (JSON list) |
-| `CHORDIFY_CHORD_MODEL` | `auto` | `auto`: the shipped `models/chordnet-chroma/2.0.0` where the NNLS plugin works, else the templates; or `templates`, or a bundle directory |
+| `CHORDIFY_CHORD_MODEL` | `auto` | `auto`: the shipped `models/chordnet-chroma/3.0.0` (every chord type) where the NNLS plugin works, else the templates; or `templates`, or a bundle directory |
 | `CHORDIFY_LM_MODEL` | `models/progression-ngram/1.0.0` | Progression model bundle |
 | `CHORDIFY_MAX_UPLOAD_MB` / `CHORDIFY_MAX_DURATION_S` | `50` / `900` | Upload limits |
 | `CHORDIFY_WORKERS` | `2` | Concurrent analyses |

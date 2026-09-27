@@ -4,7 +4,7 @@ Works for any chordify_core acoustic model: the training-free templates or an ex
 ChordNet bundle. Each model extracts its *own* FeatureSpec, exactly as in serving.
 
     python -m chordify_ai.eval.evaluate_model --choco CHOCO --model templates --synthetic --songs 25
-    python -m chordify_ai.eval.evaluate_model --choco CHOCO --model models/chordnet-chroma/2.0.0 \\
+    python -m chordify_ai.eval.evaluate_model --choco CHOCO --model models/chordnet-chroma/3.0.0 \\
         --chroma FEATURES --split test        # real Billboard NNLS chroma (McGill archive or Kaggle)
 """
 from __future__ import annotations

@@ -21,8 +21,8 @@ weakness of the beat tracker ([§4](#4-where-the-build-differs-from-the-plan)).*
 | Phase | Built in this PR | Still open |
 |---|---|---|
 | **0 · Foundations** | `chordify_core` package. One feature definition shared by training and serving: NNLS at 44.1 kHz/2048, plus a plugin-free CQT chroma. Golden tests. Billboard ingestion. Frozen artist-grouped splits. `mir_eval` harness. Backend hygiene (settings, CORS allow-list, problem+json, no files on disk). Configurable API URL in the web app. CI. | Chordino baseline and honest v1 numbers on the test split. The Chordify-Live recordings. |
-| **1 · Full-song v2** | ChordNet in PyTorch (Conformer and BiGRU, every head), training, ONNX export with a parity check, model bundles. Beat-synchronous Viterbi decoder. API v2 with jobs, SSE, cache and v1 adapter. TypeScript web app with upload, progress, timeline and playback sync. **`chordnet-chroma@2.0.0` trained on Billboard and served by default** ([§3.4](#34-acoustic-model)). | Beat This! (librosa's tempo can be off, e.g. 123 BPM on a 90 BPM take). Celery, Postgres and object storage ([§4](#4-where-the-build-differs-from-the-plan)). |
-| **2 · Progressions** | Theory engine: Roman numerals, functions, cadences, secondary dominants, borrowed chords, named loops, scale hints. n-gram + song-cache model: `/progressions/next`, predictions, surprise and predictability in every result, and a change matrix in the decoder. Web: Now/Next, circle of fifths, time per chord, repeating progressions, lead sheet, Roman/Letters, Songwriter. Corrections endpoint. | The ProgressionLM Transformer (Chordonomicon). Local keys and modulations. `sevenths` in serving. Practice mode. Corrections UI. |
+| **1 · Full-song v2** | ChordNet in PyTorch (Conformer and BiGRU, every head), training, ONNX export with a parity check, model bundles. Beat-synchronous Viterbi decoder. API v2 with jobs, SSE, cache and v1 adapter. TypeScript web app with upload, progress, timeline and playback sync. **`chordnet-chroma@3.0.0`, which names 14 chord types and inversions, served by default** ([§3.4](#34-acoustic-model), [§3.5](#35-every-chord-type-chordnet-chroma300)). | Beat This! (librosa's tempo can be off, e.g. 123 BPM on a 90 BPM take). Celery, Postgres and object storage ([§4](#4-where-the-build-differs-from-the-plan)). |
+| **2 · Progressions** | Theory engine: Roman numerals, functions, cadences, secondary dominants, borrowed chords, named loops, scale hints. n-gram + song-cache model: `/progressions/next`, predictions, surprise and predictability in every result, and a change matrix in the decoder. Web: Now/Next, circle of fifths, time per chord, repeating progressions, lead sheet, Roman/Letters, Songwriter. Corrections endpoint. | The ProgressionLM Transformer (Chordonomicon). Local keys and modulations. Practice mode. Corrections UI. |
 | **3–5** | Nothing yet beyond what they reuse: vocabulary tiers up to 169 classes, the `log_cqt` feature spec, the AudioWorklet recorder. | All. |
 
 ## 2. Code map
@@ -92,24 +92,27 @@ The ChordNet stack is implemented and tested end to end:
 
 [GuitarSet](https://zenodo.org/records/3371780) (Xi et al., 2018, CC BY 4.0) adds real recordings: 180 accompaniment takes on acoustic guitar, recorded with a microphone, with lead-sheet chords. Unlike Billboard's precomputed features, `chordify_ai.eval.guitarset` runs the whole serving path, including our own feature extraction from the audio.
 
-majmin WCSR on real music:
+majmin WCSR on real music, scored as in MIREX: the time labelled right over the time each level can compare. Before 3.0.0 our harness weighted every level by each song's full length and counted a song with nothing comparable as 0, which read about 0.8 points lower on Billboard; every number below uses the corrected scoring. GuitarSet is scored on the takes of player 05 only, whom no model trained on (3.0.0 trained on players 00–03), against the chords as played and against the lead sheet:
 
-| Model | Billboard validation (89 songs) | Billboard test (89) | GuitarSet, NNLS | GuitarSet, CQT |
+| Model | Billboard validation (89 songs) | Billboard test (89) | GuitarSet test, as played (30 takes) | GuitarSet test, lead sheet |
 |---|---|---|---|---|
-| templates 0.1.0 (decoder untuned) | 61.1 % | 68.2 % | 65.1 % | 50.0 % |
-| templates 0.2.0 (decoder tuned on validation), **served today** | 66.4 % | 71.4 % | 66.5 % | 56.0 % |
-| **`chordnet-chroma@2.0.0`** (decoder tuned on validation), **served by default** | **81.4 %** | **80.5 %** | **76.1 %** | — |
+| templates 0.2.0 (decoder tuned on validation) | 66.2 % | 71.9 % | 70.6 % | 54.6 % |
+| `chordnet-chroma@2.0.0` (Billboard, major/minor only) | **81.8 %** | 81.3 % | 78.6 % | 67.9 % |
+| **`chordnet-chroma@3.0.0`** (every chord type), **served by default** | 81.4 % | **82.3 %** | **80.9 %** | **72.6 %** |
 
-ChordNet-Chroma 2.0.0 is a 3.6 M-parameter Conformer trained on the 711 Billboard training songs. It was trained on a MacBook with an M5 Pro through the Apple GPU, at 42 s per epoch; early stopping ended the run at epoch 17 and kept epoch 11 ([`chordify_ai/TRAINING.md`](../../chordify_ai/TRAINING.md)). The decoder was then tuned on validation and the test split scored once. On Billboard test, root accuracy is 83.7 %, sevenths 61.6 % (the `majmin` vocabulary maps G:7 to G) and segmentation 0.80, which is the phase 1 `seg` target. The server picks the model by itself where the NNLS plugin works (`CHORDIFY_CHORD_MODEL=auto`) and falls back to the templates elsewhere.
+Before its decoder was tuned, the template model scored 61.1 % and 68.2 % on Billboard validation and test (old weighting). With the plugin-free CQT chroma instead of NNLS it loses about 10 points on GuitarSet.
 
-GuitarSet by style (majmin, NNLS):
+ChordNet-Chroma 2.0.0 is a 3.6 M-parameter Conformer trained on the 711 Billboard training songs, on a MacBook with an M5 Pro through the Apple GPU, at 42 s per epoch; early stopping ended the run at epoch 17 and kept epoch 11 ([`chordify_ai/TRAINING.md`](../../chordify_ai/TRAINING.md)). It only knows major and minor: G7 comes out as G. 3.0.0 is the same network trained for every chord type on four sources ([§3.5](#35-every-chord-type-chordnet-chroma300)). For each model the decoder was tuned on validation and the test split scored once. The server picks the shipped model by itself where the NNLS plugin works (`CHORDIFY_CHORD_MODEL=auto`) and falls back to the templates elsewhere.
+
+GuitarSet test by style (majmin, chords as played, 6 takes per style):
 
 | | singer-songwriter | rock | bossa nova | jazz | funk |
 |---|---|---|---|---|---|
-| templates 0.2.0 | 88.5 % | 85.0 % | 58.7 % | 45.8 % | 44.2 % |
-| ChordNet 2.0.0 | 90.5 % | 86.3 % | 71.9 % | 66.2 % | 59.7 % |
+| templates 0.2.0 | 94.5 % | 87.1 % | 57.5 % | 38.0 % | 31.2 % |
+| ChordNet 2.0.0 | 94.6 % | 91.6 % | **76.9 %** | 60.4 % | **46.1 %** |
+| ChordNet 3.0.0 | **99.0 %** | **96.8 %** | 52.6 % | **76.2 %** | 43.2 % |
 
-On this real audio the model gains the most exactly where the templates struggled: quiet, jazzy comping. The recordings go through our own NNLS extraction, not McGill's CSVs, so this also confirms that serving produces the features the model was trained on.
+ChordNet gains the most where the templates struggled: quiet, jazzy comping. 3.0.0 adds 16 points on jazz, but loses 24 on bossa nova. Bossa nova is full of sixth chords, and C6 (C E G A) has exactly the notes of Am7. 3.0.0 often picks the m7, which `majmin` counts as the wrong root. The recordings go through our own NNLS extraction, not McGill's CSVs, so this also confirms that serving produces the features the models were trained on.
 
 One caveat seen while checking the demo song. On a chord with no third (A–D–E–G, an A7sus4), the templates and ChordNet disagree about major versus minor. The audio can't settle that, and `majmin` scoring leaves such chords out.
 
@@ -125,7 +128,61 @@ Synthetic renders check that the pipeline works end to end: features, timing, tr
 
 This benchmark found one real bug. The CQT chroma kept a bin a third of a semitone sharp, and it estimated tuning modulo 33 cents, so recordings tuned more than 17 cents flat were read a semitone low. The template score on these renders went from 59.1 % to 97.0 % once that was fixed. Feature specs now carry a `revision`, and a bundle trained on an older revision is refused instead of silently mis-served.
 
-### 3.5 Latency
+### 3.5 Every chord type: `chordnet-chroma@3.0.0`
+
+3.0.0 names 14 chord types on each of the 12 roots, plus "no chord": 169 classes. The types are major, minor, dim, aug, 6, m6, 7, maj7, m7, dim7, half-diminished (m7b5), m(maj7), sus2 and sus4. Slash chords (C/E, G7/B) come from the bass head where it is at least 50 % sure of a chord tone other than the root. That threshold was tuned on validation, like the rest of the decoder. The app shows the full names and typed Roman numerals (V7, ii7, viiø7). A "Major and minor chords only" option on the upload page simplifies them instead (Cmaj7 → C, Bm7b5 → Bm).
+
+**Why new data.** Billboard alone cannot teach this. In its training songs, major, minor, 7 and m7 fill 87 % of the time, and seven of the types together (dim, aug, m6, dim7, m7b5, m(maj7), sus2) about 1 %. 2.0.0 recognised none of the other types. 3.0.0 trains on four sources, each with a fixed share of the training crops, all through the same NNLS extractor the server uses:
+
+| Source | Songs | Hours | Share of crops | What it adds | Licence |
+|---|---|---|---|---|---|
+| Billboard training split | 711 | 41.9 | 45 % | Real pop and rock | McGill features |
+| Generated songs (`chordify_ai/data/render.py`) | 2,000 | 27.1 | 25 % | Every type in balanced amounts, 20 % inversions, varied voicings, bass lines, drums and melody | ours |
+| [POP909](https://github.com/music-x-lab/POP909-Dataset) training split, rendered | 728 | 50.5 | 15 % | Real pop arrangements with rich chords | MIT |
+| [GuitarSet](https://zenodo.org/records/3371780) players 00–03 | 120 takes | 1.0 | 15 % | Real acoustic guitar, labelled with the chords as played | CC BY 4.0 |
+
+MIDI is rendered with FluidSynth and the FluidR3_GM soundfont (MIT), with random General MIDI instruments per song. AAM was left out: its labels are major/minor only. [`tools/get_extra_data.sh`](../../tools/get_extra_data.sh) downloads everything.
+
+**Training.** The loss weights each chord type by 1/√(its share of the training crops), so rare types are learnt. That also makes the network over-predict them, and the balanced generated songs add to this. The decoder therefore divides the network's output by what it was trained to expect (training share × loss weight) and multiplies by Billboard's real type frequencies, a label-shift correction whose strength (`alpha`) is tuned on validation. The best epoch and the decoder settings both maximise the mean of `majmin` and `large`, where `large` is the share of time with exactly the right chord, type included. The reference run on the M5 Pro took 72 s per epoch at 4,000 crops. Early stopping ended it at epoch 28 and kept epoch 22. The rendered songs' features are cached after the first run.
+
+**Results on the test splits** (every `mir_eval` level, corrected scoring):
+
+| Test set | Model | root | thirds | triads | majmin | majmin_inv | sevenths | tetrads | mirex | large | seg |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Billboard (89 songs) | templates 0.2.0 | 73.4 | 69.4 | 65.0 | 71.9 | 69.8 | 58.4 | 52.1 | 70.6 | 55.8 | 75.2 |
+| | 2.0.0 | 83.7 | 78.2 | 73.5 | 81.3 | 78.8 | 62.4 | 55.8 | 78.2 | 59.5 | **79.9** |
+| | **3.0.0** | **84.4** | **80.2** | **75.1** | **82.3** | **80.3** | **71.0** | **63.6** | **81.8** | **67.9** | 79.4 |
+| GuitarSet player 05, as played (30 takes) | 2.0.0 | 69.5 | 67.2 | 50.4 | 78.6 | 63.5 | 67.0 | 38.2 | 63.4 | 42.7 | 83.1 |
+| | **3.0.0** | **74.4** | **72.3** | **55.2** | **80.9** | **66.2** | **85.9** | **52.3** | **86.5** | **71.3** | **86.8** |
+
+3.0.0 beats 2.0.0 at every level on both test sets except Billboard segmentation (−0.5). Knowing the other chord types made plain major/minor slightly better, not worse. On GuitarSet scored against the lead sheet instead, which writes C where the guitarist played Cmaj7, 3.0.0's `sevenths` (48.0 %) is below 2.0.0's (61.3 %), because it reports the chords actually played. Its `majmin` is still higher (72.6 % vs 67.9 %).
+
+**By chord type** (3.0.0, share of each type's time labelled exactly right; 2.0.0 got 0 % on every type but major and minor):
+
+| Type | Billboard test: recall (share of time) | GuitarSet test, as played | Most often mistaken for |
+|---|---|---|---|
+| major | 80 % (53.4 %) | 92 % (37.6 %) | right type, wrong root; 7 |
+| minor | 55 % (14.4 %) | 78 % (10.6 %) | m7 (21 % on Billboard) |
+| 7 | 38 % (9.9 %) | 85 % (14.3 %) | major (44 % on Billboard) |
+| m7 | 66 % (9.0 %) | 48 % (9.0 %) | minor on Billboard; 7 or major on GuitarSet |
+| maj7 | 59 % (3.5 %) | 65 % (10.4 %) | major, 7 |
+| sus4 | 27 % (2.7 %) | 0 % (1.2 %) | major, m7 |
+| 6 | 12 % (0.7 %) | 18 % (9.1 %) | m7 (C6 has the notes of Am7), major |
+| m7b5 | 28 % (0.1 %) | 90 % (3.8 %) | 7 |
+| sus2, m6, dim, aug, dim7, m(maj7) | 0 % (together 0.7 %) | 0 % (together 4.0 %) | the nearest common type |
+| no chord | 83 % (5.7 %) | — | major |
+
+On Billboard validation, dim7 (53 %) and m6 (34 %) are found too, but there are only seconds of them in each test split.
+
+**Against published results.** The closest published large-vocabulary system we found is ChordFormer (2025), a Conformer on CQT audio features. Trained and tested by 5-fold cross-validation on 1,217 songs (Isophonics, Billboard, MARL), it reports root 84.7, thirds 81.8, majmin 84.1, triads 77.6, sevenths 72.3, tetrads 65.3 and mirex 83.6 ([arXiv 2502.11840](https://arxiv.org/abs/2502.11840)). 3.0.0 is 0.3–2.5 points behind on every level. The songs, the features and the protocol all differ, so this is a rough yardstick, not a like-for-like comparison.
+
+**Weak spots, in order of what they cost:**
+
+1. **6 chords versus the relative m7.** C6 and Am7 are the same four notes; only the bass tells them apart, and 3.0.0 picks the m7 too often. This is what costs bossa nova 24 points of `majmin`. The bass head already predicts the lowest note. Using it to choose between chords with the same notes (6/m7, m6/m7b5, and the inversions of dim7 and aug) is the next decoder change.
+2. **7 read as major on Billboard (44 %), minor as m7 (21 %).** Part of this is probably the annotations: a Billboard "7" can be written where the seventh is barely audible. On GuitarSet, whose labels follow what was played, 3.0.0 finds 85 % of the 7 chords.
+3. **The rarest types on real audio** (sus2, m6, dim, aug, dim7, m(maj7)): the network learnt them from generated songs, but real recordings of them are scarce. More real data with these chords is the way up: jazz and bossa nova recordings with aligned chords, or progressions from ChoCo's jazz corpora rendered like the generated songs.
+
+### 3.6 Latency
 
 Full analysis of a 296 s synthetic song on a 4-vCPU container, warm, two runs each. Every stage is included: decode, beats, features, model, both decoder passes, key, theory, predictions.
 
@@ -134,9 +191,10 @@ Full analysis of a 296 s synthetic song on a 4-vCPU container, warm, two runs ea
 | templates | NNLS | 5.4–5.8 s |
 | templates | CQT | 3.2–3.4 s |
 | ChordNet Conformer, synthetic-trained (ONNX Runtime) | CQT | 3.6–4.1 s |
-| **`chordnet-chroma@2.0.0`** (ONNX Runtime), served by default | NNLS | 7.8 s |
+| `chordnet-chroma@2.0.0` (ONNX Runtime) | NNLS | 7.8 s; 6.1–6.2 s when re-measured next to 3.0.0 |
+| **`chordnet-chroma@3.0.0`** (ONNX Runtime, 169 classes), served by default | NNLS | 6.1–6.6 s |
 
-The phase 1 budget is p95 ≤ 20 s for a 4-minute song. Switching features from CQT to NNLS costs about 2 s. ChordNet with half-beat decoding units costs 2–3 s more than the templates.
+The phase 1 budget is p95 ≤ 20 s for a 4-minute song. Switching features from CQT to NNLS costs about 2 s. ChordNet with half-beat decoding units costs 1–3 s more than the templates. The 169-class decoder costs no measurable time over the 25-class one.
 
 ## 4. Where the build differs from the plan
 
@@ -152,11 +210,11 @@ The phase 1 budget is p95 ≤ 20 s for a 4-minute song. Switching features from 
 
 ## 5. Next steps, in order
 
-1. **Improve ChordNet.** 2.0.0 ships (Billboard test 80.5 %, GuitarSet 76.1 %). Next: train the `sevenths` vocabulary (`--vocabulary sevenths`) so G7 is no longer reported as G, and read the key heads for local keys. Every retrain follows [`chordify_ai/TRAINING.md`](../../chordify_ai/TRAINING.md) and must beat the shipped bundle on the test songs and on GuitarSet.
+1. **Improve ChordNet.** 3.0.0 ships every chord type ([§3.5](#35-every-chord-type-chordnet-chroma300)). Next, in order of expected gain: choose between chords with the same notes (C6/Am7, Cm6/Am7b5) by the bass head; more real recordings with rare chords (ChoCo's jazz progressions rendered like the generated songs, aligned jazz and bossa nova recordings); then read the key heads for local keys. Every retrain follows [`chordify_ai/TRAINING.md`](../../chordify_ai/TRAINING.md) and must beat the shipped bundle on the Billboard and GuitarSet test splits.
 2. **Baselines for the gate.** Chordino (`nnls-chroma:chordino`, built by `tools/install_nnls_chroma.sh`) takes audio, and Billboard ships only features. So on Billboard the like-for-like baseline is the template model through the same decoder (`evaluate_model --model templates --chroma …`, [§3.4](#34-acoustic-model)); Chordino proper runs on GuitarSet and the Chordify-Live audio from step 3.
 3. **Chordify-Live.** Record and label the phone/guitar test set ([02 §5](02-datasets.md)): the only in-domain measure for the Quick chord screen.
 4. **ProgressionLM.** Ingest Chordonomicon + ChoCo symbolic, train the Transformer, and gate it against [§3.3](#33-progression-model-the-gate-progressionlm-has-to-beat).
-5. **Sevenths and inversions in serving** (vocabulary and bass head already exist), local keys, sections.
+5. **Local keys and sections.**
 6. Phase 3 onward as in [07](07-roadmap.md): audio-domain model v3, Android on v2, live mode.
 7. **Remove v1.** Delete the v1 classifier files in `chordify_ai/` and the v1 endpoints once Android uses v2.
 
