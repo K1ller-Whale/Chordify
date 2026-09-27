@@ -5,6 +5,16 @@ import { ProgressView } from '../components/Panels'
 import { rememberFile, WavRecorder } from '../lib/audio'
 import { formatTime } from '../lib/music'
 
+const SIMPLE_KEY = 'chordify.simpleChords'
+
+function readSimple(): boolean {
+  try {
+    return window.localStorage.getItem(SIMPLE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 export function Home({ navigate }: { navigate: (hash: string) => void }) {
   const [upload, setUpload] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -12,6 +22,7 @@ export function Home({ navigate }: { navigate: (hash: string) => void }) {
   const [dragging, setDragging] = useState(false)
   const [recording, setRecording] = useState(false)
   const [elapsed, setElapsed] = useState(0)
+  const [simple, setSimple] = useState(readSimple)
   const recorder = useRef<WavRecorder | null>(null)
 
   useEffect(() => {
@@ -28,12 +39,21 @@ export function Home({ navigate }: { navigate: (hash: string) => void }) {
     setError(null)
     setUpload(0)
     try {
-      const status = await createAnalysis(file, file.name, setUpload)
+      const status = await createAnalysis(file, file.name, setUpload, simple ? { vocabulary: 'majmin' } : undefined)
       rememberFile(status.id, file)
       navigate(`#/a/${status.id}`)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err))
       setUpload(null)
+    }
+  }
+
+  const toggleSimple = (on: boolean) => {
+    setSimple(on)
+    try {
+      window.localStorage.setItem(SIMPLE_KEY, on ? '1' : '0')
+    } catch {
+      // private mode: the choice lasts until the page is closed
     }
   }
 
@@ -82,6 +102,10 @@ export function Home({ navigate }: { navigate: (hash: string) => void }) {
           <p className="small">Single chord? Use <a href="#/quick">Quick chord</a>. Writing a song? Try the <a href="#/write">Songwriter</a>.</p>
         </section>
       </div>
+      <label className="option">
+        <input type="checkbox" checked={simple} onChange={(e) => toggleSimple(e.target.checked)} />
+        Major and minor chords only (C instead of Cmaj7, G instead of G7)
+      </label>
       {error && <div className="notice warn" role="alert">{error}</div>}
       {recent.length > 0 && (
         <section className="card">

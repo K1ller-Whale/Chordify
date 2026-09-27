@@ -32,7 +32,7 @@ from ..data import billboard, guitarset, pop909, render, splits
 from ..export.bundle import write_bundle
 from ..models.chordnet import ChordNetConfig
 from . import sources
-from .trainer import TrainConfig, load_checkpoint, train
+from .trainer import TrainConfig, class_frequencies, load_checkpoint, train
 
 SOURCES = ("billboard", "guitarset", "pop909", "generated", "synthetic")
 DEFAULT_MIX = {"billboard": 0.45, "generated": 0.25, "pop909": 0.15, "guitarset": 0.15, "synthetic": 1.0}
@@ -90,6 +90,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--select", default=None,
                         help="validation score that picks the best epoch, e.g. majmin or majmin+large "
                              "(default: majmin for the majmin vocabulary, majmin+large otherwise)")
+    parser.add_argument("--class-weight-power", type=float, default=0.5,
+                        help="chord-type loss weight = 1 / training frequency ** power (0 turns it off)")
     parser.add_argument("--encoder", default="conformer", choices=["conformer", "bigru"])
     parser.add_argument("--layers", type=int, default=4)
     parser.add_argument("--d-model", type=int, default=192)
@@ -172,6 +174,11 @@ def main(argv: list[str] | None = None) -> int:
         log(f"{name}: {len(group)} songs, {hours:.1f} h, {mix[name]:.0%} of training crops")
     train_tracks = [t for group in groups.values() for t in group]
     weights = example_weights(groups, mix) if len(groups) > 1 else None
+    # The decoder prior is corrected towards real music's chord-type frequencies (Billboard's), so
+    # the balanced generated songs and the loss weights teach the network rare types without
+    # making it guess them where a plain triad is far more likely.
+    reference = (class_frequencies([t.example for t in groups["billboard"]], vocabulary)
+                 if "billboard" in groups and len(groups) > 1 else None)
 
     input_kind = "bothchroma" if spec.kind.endswith("bothchroma") else "log_cqt"
     model_config = ChordNetConfig(input=input_kind, n_features=25 if input_kind == "bothchroma" else spec.n_bins,
@@ -179,8 +186,9 @@ def main(argv: list[str] | None = None) -> int:
     select = args.select or ("majmin" if args.vocabulary == "majmin" else "majmin+large")
     config = TrainConfig(vocabulary=args.vocabulary, model=model_config, epochs=args.epochs, items_per_epoch=args.items,
                          batch_size=args.batch_size, lr=args.lr, threads=args.threads, device=args.device,
-                         select=select)
-    result = train(config, train_tracks, val_tracks, args.out, log=log, sample_weights=weights)
+                         select=select, class_weight_power=args.class_weight_power)
+    result = train(config, train_tracks, val_tracks, args.out, log=log, sample_weights=weights,
+                   reference_prior=reference)
     print(json.dumps({f"best_{select}": result["best_score"], "epochs": result["epochs"]}, indent=1))
     if not Path(result["checkpoint"]).exists():
         print("no checkpoint yet (stopped before the first epoch finished); nothing to export")
@@ -194,7 +202,9 @@ def main(argv: list[str] | None = None) -> int:
                      metrics={"validation": checkpoint["validation"], "epoch": checkpoint["epoch"], "select": select},
                      training_data={"source": ",".join(names), "sources": data_info,
                                     "split": Path(args.split_file).name, "split_sha256": _sha(args.split_file),
-                                    "train_songs": len(train_tracks), "validation_songs": len(val_tracks)})
+                                    "train_songs": len(train_tracks), "validation_songs": len(val_tracks),
+                                    "class_weight_power": args.class_weight_power,
+                                    "prior_reference": "billboard" if reference is not None else None})
         print(f"bundle written to {args.export}")
     return 0
 

@@ -38,6 +38,7 @@ class TrainConfig:
     threads: int = 0
     device: str = "auto"  # "auto" (cuda, then Apple's mps, then cpu), "cuda", "mps" or "cpu"
     select: str = "majmin"  # validation score that picks the best epoch: a level or "a+b" (their mean)
+    class_weight_power: float = 0.5  # chord-type loss weight = 1 / training frequency ** power (0: off)
 
     def to_dict(self) -> dict:
         return {**asdict(self), "model": self.model.to_dict()}
@@ -83,15 +84,34 @@ def evaluate(model: ChordNet, tracks: list[EvalTrack], vocabulary: vocab.Vocabul
     return chord_eval.aggregate(rows)
 
 
-def class_prior(examples, vocabulary: vocab.Vocabulary) -> np.ndarray:
-    counts = np.ones(vocabulary.size)
-    for ex in examples:
+def class_frequencies(examples, vocabulary: vocab.Vocabulary, sample_weights=None) -> np.ndarray:
+    """Share of training frames per class as the crop sampler sees them: each song's label
+    histogram, weighted by how often the song is drawn. Transposition makes roots uniform in
+    training, so each chord type is averaged over its 12 roots."""
+    p = np.full(len(examples), 1.0 / max(len(examples), 1)) if sample_weights is None \
+        else np.asarray(sample_weights, dtype=float) / np.sum(sample_weights)
+    counts = np.full(vocabulary.size, 1e-6)
+    for ex, w in zip(examples, p):
         valid = ex.targets.chord[ex.targets.chord >= 0]
-        counts += np.bincount(valid, minlength=vocabulary.size)
-    # transposition makes roots uniform in training, so average each quality over its 12 roots
+        if len(valid):
+            counts += w * np.bincount(valid, minlength=vocabulary.size) / len(ex.targets.chord)
     q = counts[:-1].reshape(-1, 12).mean(axis=1, keepdims=True).repeat(12, axis=1).reshape(-1)
-    prior = np.concatenate([q, counts[-1:]])
+    freq = np.concatenate([q, counts[-1:]])
+    return freq / freq.sum()
+
+
+def decoder_prior(frequencies: np.ndarray, class_weights: np.ndarray, reference: np.ndarray | None) -> np.ndarray:
+    """What the decoder divides the network's posteriors by (``alpha``-scaled). The network
+    learns the training frequencies times the loss weights; dividing by that and multiplying by
+    real music's frequencies (``reference``, e.g. Billboard's) corrects the label shift that
+    generated songs and loss weights introduce. Without a reference: the learnt prior itself."""
+    learnt = frequencies * class_weights
+    prior = learnt / reference if reference is not None else learnt
     return prior / prior.sum()
+
+
+def class_prior(examples, vocabulary: vocab.Vocabulary) -> np.ndarray:
+    return class_frequencies(examples, vocabulary)
 
 
 def selection_score(scores: dict, select: str) -> float | None:
@@ -100,7 +120,9 @@ def selection_score(scores: dict, select: str) -> float | None:
 
 
 def train(config: TrainConfig, train_tracks: list[EvalTrack], val_tracks: list[EvalTrack], out_dir: str | Path,
-          log=print, sample_weights: list[float] | None = None) -> dict:
+          log=print, sample_weights: list[float] | None = None, reference_prior: np.ndarray | None = None) -> dict:
+    """``sample_weights``: per-song sampling weights (source mix). ``reference_prior``: class
+    frequencies of real music (e.g. Billboard's) that the decoder prior corrects towards."""
     torch.manual_seed(config.seed)
     if config.threads:
         torch.set_num_threads(config.threads)
@@ -116,12 +138,11 @@ def train(config: TrainConfig, train_tracks: list[EvalTrack], val_tracks: list[E
         f"{len(train_tracks)} train / {len(val_tracks)} validation tracks, on {device}")
 
     examples = [t.example for t in train_tracks]
-    counts = torch.zeros(vocabulary.size)
-    for ex in examples:
-        valid = ex.targets.chord[ex.targets.chord >= 0]
-        counts += torch.bincount(torch.from_numpy(valid), minlength=vocabulary.size).float()
-    weights = quality_class_weights(counts, len(vocabulary.qualities)).to(device)
-    prior = class_prior(examples, vocabulary)
+    frequencies = class_frequencies(examples, vocabulary, sample_weights)
+    class_weights = quality_class_weights(torch.from_numpy(frequencies).float(), len(vocabulary.qualities),
+                                          config.class_weight_power)
+    weights = class_weights.to(device)
+    prior = decoder_prior(frequencies, class_weights.numpy(), reference_prior)
 
     dataset = CropDataset(examples, vocabulary, crop=config.crop, items_per_epoch=config.items_per_epoch,
                           seed=config.seed, weights=sample_weights)

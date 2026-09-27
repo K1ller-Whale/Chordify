@@ -40,9 +40,10 @@ def chordnet_loss(outputs: dict[str, torch.Tensor], batch: dict[str, torch.Tenso
     return total, {k: float(v.detach()) for k, v in parts.items()}
 
 
-def quality_class_weights(counts: torch.Tensor, n_qualities: int) -> torch.Tensor:
-    """1/sqrt(frequency) per chord quality (roots are balanced by transposition); N keeps 1."""
+def quality_class_weights(counts: torch.Tensor, n_qualities: int, power: float = 0.5) -> torch.Tensor:
+    """1/frequency**power per chord quality (roots are balanced by transposition); N keeps 1.
+    ``counts`` may be raw frame counts or frequencies; power 0 turns weighting off."""
     per_quality = counts[:-1].reshape(n_qualities, 12).sum(dim=1).float()
-    w = 1.0 / per_quality.clamp(min=1.0).sqrt()
+    w = per_quality.clamp(min=1e-6 * float(per_quality.sum())) ** -power
     w = w / w.mean()
     return torch.cat([w.repeat_interleave(12), torch.ones(1)])

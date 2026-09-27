@@ -22,7 +22,6 @@ from chordify_core import vocab
 
 LEVELS = ("root", "thirds", "triads", "majmin", "majmin_inv", "sevenths", "sevenths_inv",
           "tetrads", "tetrads_inv", "mirex")
-QUALITY_STEP = 0.01  # seconds between the time samples of the per-quality breakdown
 SEGMENTATION = ("overseg", "underseg", "seg")
 
 Interval = tuple[float, float, str]
@@ -77,21 +76,34 @@ def _quality_name(index: int) -> str:
 def quality_breakdown(ref_int: np.ndarray, ref_lab: list[str], est_int: np.ndarray,
                       est_lab: list[str]) -> dict[str, dict[str, float]]:
     """Seconds of each reference chord type (large vocabulary; X skipped) and how they were
-    labelled: {"maj7": {"maj7": 12.3, "maj": 4.1, ...}}. Exact class match, bass ignored."""
+    labelled: {"maj7": {"maj7": 12.3, "maj": 4.1, ...}}. Exact class match, bass ignored.
+
+    Works on the pieces between consecutive reference and estimate boundaries, over the
+    reference span; where the estimate has a gap, its nearest chord counts."""
     cache: dict[str, int | None] = {}
-    times = np.arange(ref_int[0, 0] + QUALITY_STEP / 2, ref_int[-1, 1], QUALITY_STEP)
-    ref_idx = np.clip(np.searchsorted(ref_int[:, 0], times, side="right") - 1, 0, len(ref_lab) - 1)
-    est_idx = np.clip(np.searchsorted(est_int[:, 0], times, side="right") - 1, 0, len(est_lab) - 1)
-    ref_cls = np.array([_large_class(ref_lab[i], cache) if ref_int[i, 0] <= t < ref_int[i, 1] else None
-                        for i, t in zip(ref_idx, times)], dtype=object)
-    est_cls = np.array([_large_class(est_lab[i], cache) for i in est_idx], dtype=object)
+    names: dict[int, str] = {}
+
+    def quality(index: int) -> str:
+        if index not in names:
+            names[index] = _quality_name(index)
+        return names[index]
+
+    edges = np.unique(np.concatenate([ref_int.ravel(), est_int.ravel()]))
+    edges = edges[(edges >= ref_int[0, 0]) & (edges <= ref_int[-1, 1])]
+    mids, lengths = (edges[:-1] + edges[1:]) / 2, np.diff(edges)
+    ref_idx = np.searchsorted(ref_int[:, 0], mids, side="right") - 1
+    est_idx = np.clip(np.searchsorted(est_int[:, 0], mids, side="right") - 1, 0, len(est_lab) - 1)
     table: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-    for r, e in zip(ref_cls, est_cls):
+    for i, j, t, length in zip(ref_idx, est_idx, mids, lengths):
+        if i < 0 or t >= ref_int[i, 1]:
+            continue  # a gap in the reference
+        r = _large_class(ref_lab[i], cache)
         if r is None:
             continue
-        q = _quality_name(r)
-        verdict = q if e == r else ("X" if e is None else ("wrong root" if _quality_name(e) == q else _quality_name(e)))
-        table[q][verdict] += QUALITY_STEP
+        e = _large_class(est_lab[j], cache)
+        q = quality(r)
+        verdict = q if e == r else ("X" if e is None else ("wrong root" if quality(e) == q else quality(e)))
+        table[q][verdict] += float(length)
     return {q: dict(v) for q, v in table.items()}
 
 
