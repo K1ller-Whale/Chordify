@@ -115,6 +115,6 @@ git push
 ```
 
 The server picks the bundle up automatically (`CHORDIFY_CHORD_MODEL=auto`) wherever the
-NNLS Chroma plugin is installed (`tools/install_nnls_chroma.sh`, Linux); anywhere else it
-keeps using the template model. Then ask Claude to check it on real guitar recordings
+NNLS Chroma plugin is installed (`tools/install_nnls_chroma.sh`, Linux and macOS); anywhere
+else it keeps using the template model. Then ask Claude to check it on real guitar recordings
 (`chordify_ai.eval.guitarset`) and update the docs and the PR.
