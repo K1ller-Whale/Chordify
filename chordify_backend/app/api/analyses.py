@@ -10,6 +10,8 @@ from fastapi import APIRouter, File, Form, Header, Request, Response, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from pydantic import ValidationError
 
+from chordify_core import vocab
+
 from ..audio_io import read_upload, sniff_format
 from ..errors import ApiError
 from ..jobs import TERMINAL, Job, JobManager
@@ -40,8 +42,9 @@ async def create_analysis(request: Request, file: UploadFile = File(...), option
     except ValidationError as err:
         raise ApiError(422, "INVALID_REQUEST", f"options: {err.errors()[0]['msg']}") from err
     vocabulary = manager.models.acoustic.vocabulary.name
-    if parsed.vocabulary != vocabulary:
-        raise ApiError(422, "OPTION_UNAVAILABLE", f"The active chord model supports the '{vocabulary}' vocabulary.")
+    if parsed.vocabulary and vocab.TIERS.index(parsed.vocabulary) > vocab.TIERS.index(vocabulary):
+        raise ApiError(422, "OPTION_UNAVAILABLE", f"The active chord model knows the '{vocabulary}' chord types; "
+                                                  f"ask for '{vocabulary}' or a coarser vocabulary.")
     data = await read_upload(file, manager.settings.max_upload_bytes)
     if sniff_format(data[:16]) is None:
         raise ApiError(415, "UNSUPPORTED_MEDIA_TYPE", "The file is not a supported audio format "

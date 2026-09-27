@@ -12,7 +12,7 @@ from typing import Callable
 import numpy as np
 
 from chordify_core import decode, features, lm, theory, vocab
-from chordify_core.acoustic import decoder_kwargs
+from chordify_core.acoustic import decoder_kwargs, inversion_threshold
 from chordify_core.theory import Key
 
 from .beats import BeatInfo, downbeat_phase, track_beats
@@ -70,14 +70,16 @@ def _bars(downbeats: np.ndarray, end: float, segments: list[dict]) -> list[dict]
     return bars
 
 
-def analyse(y: np.ndarray, sr: int, *, models: Models, analysis_id: str, vocabulary: str = "majmin",
+def analyse(y: np.ndarray, sr: int, *, models: Models, analysis_id: str, vocabulary: str | None = None,
             predictions: bool = True, min_segment_beats: int = 1, filename: str | None = None,
             sha256: str | None = None, no_music_threshold: float = 0.9,
             progress: ProgressFn = lambda *_: None, should_cancel: Callable[[], bool] = lambda: False) -> dict:
     duration = len(y) / sr
     acoustic = models.acoustic
-    if vocabulary != acoustic.vocabulary.name:
-        raise ValueError(f"the active chord model supports '{acoustic.vocabulary.name}', not '{vocabulary}'")
+    target = acoustic.vocabulary if vocabulary is None else vocab.VOCABULARIES[vocabulary]
+    if vocab.TIERS.index(target.name) > vocab.TIERS.index(acoustic.vocabulary.name):
+        raise ValueError(f"the active chord model knows the '{acoustic.vocabulary.name}' chord types, "
+                         f"not '{target.name}'")
 
     progress("beats", 0.1, None)
     beats = track_beats(y, sr)
@@ -108,21 +110,44 @@ def analyse(y: np.ndarray, sr: int, *, models: Models, analysis_id: str, vocabul
     _check(should_cancel)
 
     beat_times = beats.beats
+    threshold = inversion_threshold(acoustic)
+    bass = output.extra.get("bass") if threshold is not None else None
+    frame_times = spec.frame_times(len(output.chord))
+
+    def name(index: int, seg: decode.Segment | None = None) -> str:
+        label = acoustic.vocabulary.decode(index)
+        if bass is not None and seg is not None:
+            label = decode.inversion(label, decode.mean_over(bass, frame_times, seg.start, seg.end), threshold)
+        if target is not acoustic.vocabulary:
+            label = vocab.simplify(label, target)
+        return _spell(label, key)
+
+    merged: list[dict] = []  # a coarser vocabulary can make neighbours equal (Cmaj7, C6 -> C, C)
+    for seg in segments:
+        label = name(seg.index, seg)
+        if merged and merged[-1]["label"] == label:
+            last = merged[-1]
+            total = (last["end"] - last["start"]) + seg.duration
+            last["confidence"] = ((last["end"] - last["start"]) * last["confidence"] + seg.duration * seg.confidence) / total
+            last["end"] = seg.end
+        else:
+            merged.append({"start": seg.start, "end": seg.end, "label": label, "confidence": seg.confidence,
+                           "alternatives": [(name(j), p) for j, p in seg.alternatives]})
+
     chords: list[dict] = []
-    for i, seg in enumerate(segments):
-        label = _spell(acoustic.vocabulary.decode(seg.index), key)
+    for i, seg in enumerate(merged):
+        label = seg["label"]
         chord = vocab.parse(label)
-        entry = {"index": i, "start": round(seg.start, 3), "end": round(seg.end, 3), "label": label,
-                 "display": vocab.display_name(label, flats=key.flats), "confidence": round(seg.confidence, 4),
-                 "alternatives": [{"label": _spell(acoustic.vocabulary.decode(j), key),
-                                   "display": vocab.display_name(_spell(acoustic.vocabulary.decode(j), key), key.flats),
-                                   "p": round(p, 4)} for j, p in seg.alternatives]}
+        entry = {"index": i, "start": round(seg["start"], 3), "end": round(seg["end"], 3), "label": label,
+                 "display": vocab.display_name(label, flats=key.flats), "confidence": round(seg["confidence"], 4),
+                 "alternatives": [{"label": alt, "display": vocab.display_name(alt, key.flats), "p": round(p, 4)}
+                                  for alt, p in seg["alternatives"] if alt != label]}
         if len(beat_times):
-            entry["beats"] = int(((beat_times >= seg.start - 1e-3) & (beat_times < seg.end - 1e-3)).sum())
+            entry["beats"] = int(((beat_times >= seg["start"] - 1e-3) & (beat_times < seg["end"] - 1e-3)).sum())
         if chord.is_chord:
-            entry.update({"root": key.spell(chord.root), "quality": acoustic.vocabulary.quality_of(seg.index),
+            entry.update({"root": key.spell(chord.root), "quality": target.quality_of(target.encode(label)),
                           "bass": key.spell(chord.bass), **{k: v for k, v in theory.describe(label, key).items()
-                                                            if k in ("roman", "function", "scale_hint")}})
+                                                            if k in ("roman", "roman_triad", "function", "scale_hint")}})
         chords.append(entry)
 
     real = [c for c in chords if vocab.parse(c["label"]).is_chord]
@@ -154,7 +179,7 @@ def analyse(y: np.ndarray, sr: int, *, models: Models, analysis_id: str, vocabul
     for c in real:
         share[c["display"]] += c["end"] - c["start"]
     total = sum(share.values()) or 1.0
-    romans = [c.get("roman") for c in real]
+    romans = [c.get("roman_triad") for c in real]  # loops match on bare numerals: V7 counts as V
     return {
         "schema_version": 1,
         "analysis_id": analysis_id,

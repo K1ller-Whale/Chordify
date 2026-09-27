@@ -148,6 +148,13 @@ def decoder_kwargs(model) -> dict:
     return {k: v for k, v in getattr(model, "decoder_params", {}).items() if k in DECODER_KEYS}
 
 
+def inversion_threshold(model) -> float | None:
+    """Bass-head confidence above which a chord gets a slash bass (bundle ``decoder`` block,
+    tuned on validation); None when the model has no bass head or inversions are off."""
+    value = getattr(model, "decoder_params", {}).get("inversion_threshold")
+    return None if value is None else float(value)
+
+
 def load_acoustic_model(reference: str | Path | None) -> OnnxChordModel | TemplateChordModel:
     """``None`` or ``"templates"`` -> TemplateChordModel; a directory -> ONNX bundle."""
     if reference in (None, "", "templates"):

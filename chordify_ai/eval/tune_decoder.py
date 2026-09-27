@@ -1,9 +1,10 @@
 """Tune a bundle's decoder settings on the Billboard validation split.
 
 The model runs once per song; every setting in a small grid then decodes those outputs
-with the production decoder. The best majmin WCSR wins (segmentation breaks ties), and
-``--write`` stores it in the bundle's ``decoder`` block, which the server reads. The test
-split is never touched, so test scores stay honest.
+with the production decoder. The best majmin WCSR wins (segmentation breaks ties). Then the
+bass-head confidence for slash chords is chosen on majmin_inv (tetrads_inv for larger
+vocabularies). ``--write`` stores both in the bundle's ``decoder`` block, which the server
+reads. The test split is never touched, so test scores stay honest.
 
     python -m chordify_ai.eval.tune_decoder --choco CHOCO --chroma FEATURES --model BUNDLE --write
 """
@@ -22,6 +23,7 @@ from .evaluate_model import segments_for
 
 GRID = {"alpha": [0.0, 0.3, 0.6], "self_prob": [0.6, 0.75, 0.85, 0.92],
         "boundary_weight": [0.0, 0.5, 1.0], "subdivide": [1, 2]}
+INVERSION_THRESHOLDS = (None, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -66,12 +68,31 @@ def main(argv: list[str] | None = None) -> int:
     for majmin, seg, params in results[:5]:
         print(f"majmin {majmin:.4f}  seg {seg:.4f}  {params}")
     best_majmin, best_seg, best = results[0]
+
+    # Slash basses from the bass head: pick the confidence threshold on the inversion-aware level.
+    level = "majmin_inv" if model.vocabulary.name == "majmin" else "tetrads_inv"
+    inversions = {}
+    if any("bass" in output.extra for _, _, output, _ in songs):
+        for threshold in INVERSION_THRESHOLDS:
+            rows = [chord_eval.evaluate_track(track.chords, segments_for(model, raw, spec, beats, track.duration,
+                                                                         output=output, inversion_threshold=threshold,
+                                                                         **best))
+                    for track, raw, output, beats in songs]
+            inversions[threshold] = chord_eval.aggregate(rows)[level]
+            print(f"inversions {'off' if threshold is None else threshold}: {level} {inversions[threshold]:.4f}")
+    best_threshold = max(inversions, key=lambda t: (inversions[t], t is None)) if inversions else None
     print(json.dumps({"model": model.id, "tracks": len(songs), "current": current, "best": best,
-                      "validation": {"majmin": round(best_majmin, 4), "seg": round(best_seg, 4)}}))
+                      "inversion_threshold": best_threshold,
+                      "validation": {"majmin": round(best_majmin, 4), "seg": round(best_seg, 4),
+                                     **({level: round(inversions[best_threshold], 4)} if inversions else {})}}))
     if args.write:
         bundle_path = Path(args.model) / "bundle.json"
         bundle = json.loads(bundle_path.read_text())
-        bundle["decoder"] = {**bundle.get("decoder", {}), **best, "tuned_on": "billboard validation split"}
+        decoder = {**bundle.get("decoder", {}), **best, "tuned_on": "billboard validation split"}
+        decoder.pop("inversion_threshold", None)
+        if best_threshold is not None:
+            decoder["inversion_threshold"] = best_threshold
+        bundle["decoder"] = decoder
         bundle_path.write_text(json.dumps(bundle, indent=1) + "\n")
     return 0
 

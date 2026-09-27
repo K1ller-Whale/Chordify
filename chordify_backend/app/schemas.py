@@ -7,7 +7,9 @@ from pydantic import BaseModel, Field
 
 
 class AnalysisOptions(BaseModel):
-    vocabulary: Literal["majmin", "sevenths", "large"] = "majmin"
+    vocabulary: Literal["majmin", "sevenths", "large"] | None = Field(
+        None, description="Chord types to report. Default: every type the active model knows. A coarser "
+                          "tier simplifies its chords (Cmaj7 -> C, Bm7b5 -> Bm); a finer one is refused.")
     predictions: bool = True
     min_segment_beats: int = Field(1, ge=1, le=8)
 
@@ -82,7 +84,8 @@ class ChordSegment(BaseModel):
     root: str | None = None
     quality: str | None = None
     bass: str | None = None
-    roman: str | None = None
+    roman: str | None = Field(None, description="Roman numeral with the chord type: V7, IVmaj7, viiø7")
+    roman_triad: str | None = Field(None, description="Bare numeral (V for V7), as predictions and patterns use")
     function: str | None = None
     scale_hint: str | None = None
     confidence: float
