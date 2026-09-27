@@ -14,9 +14,17 @@ uvicorn chordify_backend.app.main:app --reload --port 8000
 ```
 
 `ffmpeg` must be on the PATH to decode m4a/aac and webm uploads (the web app records
-WAV, so its recordings do not need it). For Billboard-compatible NNLS chroma features also install `vamp`
-and build the plugin with `tools/install_nnls_chroma.sh`; without it the service
-uses the plugin-free CQT chroma at the same frame rate.
+WAV, so its recordings do not need it). For Billboard-compatible NNLS chroma features, which the shipped
+ChordNet model needs, build the plugin and install its Python host:
+
+```bash
+# Linux: apt-get install libboost-dev      macOS: xcode-select --install && brew install boost
+bash tools/install_nnls_chroma.sh
+pip install --no-build-isolation vamp
+```
+
+Without it the service uses the training-free template model on the plugin-free CQT
+chroma, and `GET /api/v2/models` shows which model is active.
 
 ## Configuration (environment)
 
