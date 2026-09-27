@@ -12,6 +12,7 @@ Synthetic pre-training / smoke run (no downloads beyond ChoCo):
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 from pathlib import Path
@@ -47,6 +48,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--threads", type=int, default=0)
+    parser.add_argument("--device", default="auto",
+                        help="auto (CUDA, then Apple's mps, then cpu), cuda, mps or cpu")
     parser.add_argument("--cache", default="data/cache/synthetic")
     parser.add_argument("--out", required=True)
     parser.add_argument("--export", help="write an ONNX model bundle to this directory")
@@ -75,9 +78,12 @@ def main(argv: list[str] | None = None) -> int:
     model_config = ChordNetConfig(input=input_kind, n_features=25 if input_kind == "bothchroma" else spec.n_bins,
                                   d_model=args.d_model, encoder=args.encoder, n_layers=args.layers)
     config = TrainConfig(vocabulary=args.vocabulary, model=model_config, epochs=args.epochs, items_per_epoch=args.items,
-                         batch_size=args.batch_size, lr=args.lr, threads=args.threads)
-    result = train(config, train_tracks, val_tracks, args.out)
-    print(json.dumps({"best_majmin": result["best_score"]}, indent=1))
+                         batch_size=args.batch_size, lr=args.lr, threads=args.threads, device=args.device)
+    result = train(config, train_tracks, val_tracks, args.out, log=functools.partial(print, flush=True))
+    print(json.dumps({"best_majmin": result["best_score"], "epochs": result["epochs"]}, indent=1))
+    if not Path(result["checkpoint"]).exists():
+        print("no checkpoint yet (stopped before the first epoch finished); nothing to export")
+        return 1
 
     if args.export:
         model, checkpoint = load_checkpoint(result["checkpoint"])

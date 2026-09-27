@@ -36,16 +36,29 @@ class TrainConfig:
     ema_decay: float = 0.999
     seed: int = 0
     threads: int = 0
+    device: str = "auto"  # "auto" (cuda, then Apple's mps, then cpu), "cuda", "mps" or "cpu"
 
     def to_dict(self) -> dict:
         return {**asdict(self), "model": self.model.to_dict()}
 
 
+def resolve_device(name: str = "auto") -> torch.device:
+    if name != "auto":
+        return torch.device(name)
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 def torch_runner(model: ChordNet):
+    device = next(model.parameters()).device
+
     def run(x: np.ndarray) -> dict[str, np.ndarray]:
         with torch.no_grad():
-            out = model(torch.from_numpy(x))
-        return {k: v.numpy() for k, v in out.items()}
+            out = model(torch.from_numpy(x).to(device))
+        return {k: v.cpu().numpy() for k, v in out.items()}
     return run
 
 
@@ -87,19 +100,21 @@ def train(config: TrainConfig, train_tracks: list[EvalTrack], val_tracks: list[E
         torch.set_num_threads(config.threads)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    (out / "best.pt").unlink(missing_ok=True)  # never export a checkpoint left by an earlier run
     vocabulary = vocab.VOCABULARIES[config.vocabulary]
     config.model.n_classes = vocabulary.size
-    model = ChordNet(config.model)
+    device = resolve_device(config.device)
+    model = ChordNet(config.model).to(device)
     ema = copy.deepcopy(model).eval()
     log(f"ChordNet {config.model.encoder}: {count_parameters(model) / 1e6:.2f} M parameters, "
-        f"{len(train_tracks)} train / {len(val_tracks)} validation tracks")
+        f"{len(train_tracks)} train / {len(val_tracks)} validation tracks, on {device}")
 
     examples = [t.example for t in train_tracks]
     counts = torch.zeros(vocabulary.size)
     for ex in examples:
         valid = ex.targets.chord[ex.targets.chord >= 0]
         counts += torch.bincount(torch.from_numpy(valid), minlength=vocabulary.size).float()
-    weights = quality_class_weights(counts, len(vocabulary.qualities))
+    weights = quality_class_weights(counts, len(vocabulary.qualities)).to(device)
     prior = class_prior(examples, vocabulary)
 
     dataset = CropDataset(examples, vocabulary, crop=config.crop, items_per_epoch=config.items_per_epoch,
@@ -115,11 +130,27 @@ def train(config: TrainConfig, train_tracks: list[EvalTrack], val_tracks: list[E
         return 0.5 * (1 + math.cos(math.pi * min(1.0, progress)))
 
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimiser, lr_at)
-    history, best, best_score, stale, step = [], None, -1.0, 0, 0
+    history: list[dict] = []
+    try:
+        epochs_run = _run_epochs(config, model, ema, loader, optimiser, scheduler, weights, val_tracks, vocabulary,
+                                 prior, device, out, history, log)
+    except KeyboardInterrupt:  # Ctrl-C: keep the best checkpoint so far and export it
+        log("stopped by the user; keeping the best checkpoint so far")
+        epochs_run = len(history)
+    best_score = max((row["validation"].get("majmin", -1.0) for row in history), default=-1.0)
+    (out / "history.json").write_text(json.dumps(history, indent=1))
+    return {"best_score": best_score, "history": history, "checkpoint": str(out / "best.pt"), "prior": prior,
+            "epochs": epochs_run}
+
+
+def _run_epochs(config, model, ema, loader, optimiser, scheduler, weights, val_tracks, vocabulary, prior, device,
+                out: Path, history: list, log) -> int:
+    best_score, stale, step = -1.0, 0, 0
     for epoch in range(config.epochs):
         model.train()
         started, losses = time.time(), []
         for batch in loader:
+            batch = {name: value.to(device) for name, value in batch.items()}
             outputs = model(batch["features"], key_padding_mask=~batch["frame_mask"])
             loss, parts = chordnet_loss(outputs, batch, class_weights=weights)
             optimiser.zero_grad()
@@ -144,17 +175,18 @@ def train(config: TrainConfig, train_tracks: list[EvalTrack], val_tracks: list[E
         log(f"epoch {epoch + 1:3d}  chord loss {mean['chord']:.3f}  boundary {mean['boundary']:.3f}  "
             f"val majmin {scores.get('majmin', float('nan')) * 100:.1f}  seg {scores.get('seg', float('nan')) * 100:.1f}"
             f"  ({row['seconds']} s)")
+        (out / "history.json").write_text(json.dumps(history, indent=1))
         if score > best_score:
-            best_score, best, stale = score, copy.deepcopy(ema.state_dict()), 0
-            torch.save({"config": config.to_dict(), "state_dict": best, "prior": prior.tolist(),
+            best_score, stale = score, 0
+            state = {name: value.detach().cpu().clone() for name, value in ema.state_dict().items()}
+            torch.save({"config": config.to_dict(), "state_dict": state, "prior": prior.tolist(),
                         "validation": scores, "epoch": epoch + 1}, out / "best.pt")
         else:
             stale += 1
             if stale >= config.patience:
                 log("early stopping")
                 break
-    (out / "history.json").write_text(json.dumps(history, indent=1))
-    return {"best_score": best_score, "history": history, "checkpoint": str(out / "best.pt"), "prior": prior}
+    return len(history)
 
 
 def load_checkpoint(path: str | Path) -> tuple[ChordNet, dict]:

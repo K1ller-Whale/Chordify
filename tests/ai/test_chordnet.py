@@ -142,6 +142,34 @@ def test_tiny_training_run_learns_and_exports(tmp_path):
     assert set(evaluate(model, tracks[3:], MAJMIN, None)) >= {"majmin", "seg"}
 
 
+def test_device_choice():
+    from chordify_ai.train.trainer import resolve_device
+
+    assert resolve_device("cpu").type == "cpu"
+    assert resolve_device("auto").type in {"cuda", "mps", "cpu"}
+
+
+def test_ctrl_c_keeps_the_best_checkpoint_so_far(tmp_path):
+    tracks = sources.synthetic(_toy_tracks(), MAJMIN, features.CQT_BOTHCHROMA, cache_dir=tmp_path / "cache")
+    config = TrainConfig(model=ChordNetConfig.small(d_model=32, n_layers=1), epochs=5, items_per_epoch=16,
+                         batch_size=8, crop=128, warmup_steps=2, device="cpu")
+    (tmp_path / "run").mkdir()
+    (tmp_path / "run" / "best.pt").write_bytes(b"left over from an earlier run")
+    epochs_logged = []
+
+    def log(message):
+        if message.startswith("epoch"):
+            epochs_logged.append(message)
+            if len(epochs_logged) == 2:
+                raise KeyboardInterrupt  # the user presses Ctrl-C during epoch 2's report
+
+    result = train(config, tracks[:3], tracks[3:], tmp_path / "run", log=log)
+    assert result["epochs"] == 2 and len(result["history"]) == 2
+    checkpoint = torch.load(result["checkpoint"], weights_only=False)
+    assert checkpoint["epoch"] == 1  # this run's epoch 1, not the stale file
+    assert json.loads((tmp_path / "run" / "history.json").read_text())[0]["epoch"] == 1
+
+
 def test_crop_dataset_items_have_consistent_lengths():
     tracks = sources.synthetic(_toy_tracks(2, 12.0), MAJMIN, features.CQT_BOTHCHROMA)
     ds = CropDataset([t.example for t in tracks], MAJMIN, crop=128, items_per_epoch=5)
