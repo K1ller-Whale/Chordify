@@ -5,7 +5,7 @@ import { ChordShare, CircleOfFifths, LeadSheet, ProgressView } from '../componen
 import { NextChord, NowPlaying } from '../components/NowAndNext'
 import { Timeline } from '../components/Timeline'
 import { recallFile, rememberFile, sha256, waveformPeaks } from '../lib/audio'
-import { MAX_CAPO, shapeKey, suggestCapo, withCapo } from '../lib/capo'
+import { MAX_CAPO, readCapo, saveCapo, shapeKey, suggestCapo, withCapo } from '../lib/capo'
 import { PlaybackClock, useClock } from '../lib/clock'
 import { chordIndexAt, isNoChord, type Notation } from '../lib/music'
 
@@ -59,17 +59,6 @@ export function AnalysisPage({ id }: { id: string }) {
     )
   }
   return <AnalysisView id={id} result={phase.result} />
-}
-
-const capoKey = (id: string) => `chordify.capo.${id}`
-
-function readCapo(id: string): number {
-  try {
-    const value = Number(window.localStorage.getItem(capoKey(id)))
-    return Number.isInteger(value) && value >= 0 && value <= MAX_CAPO ? value : 0
-  } catch {
-    return 0
-  }
 }
 
 function AnalysisView({ id, result: analysed }: { id: string; result: AnalysisResult }) {
@@ -143,11 +132,7 @@ function AnalysisView({ id, result: analysed }: { id: string; result: AnalysisRe
 
   const changeCapo = (value: number) => {
     setCapo(value)
-    try {
-      window.localStorage.setItem(capoKey(id), String(value))
-    } catch {
-      // private mode: the capo lasts until the page is closed
-    }
+    saveCapo(id, value)
   }
 
   const attach = async (picked: File | undefined) => {

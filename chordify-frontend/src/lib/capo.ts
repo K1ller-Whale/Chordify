@@ -7,6 +7,27 @@ import { hasOpenShape, noteToPc } from './music'
 
 export const MAX_CAPO = 9
 
+const capoKey = (id: string) => `chordify.capo.${id}`
+
+/** The capo saved for an analysis (0 when none, or when storage is unavailable). */
+export function readCapo(id: string): number {
+  try {
+    const value = Number(window.localStorage.getItem(capoKey(id)))
+    return Number.isInteger(value) && value >= 0 && value <= MAX_CAPO ? value : 0
+  } catch {
+    return 0
+  }
+}
+
+export function saveCapo(id: string, capo: number): void {
+  try {
+    if (capo) window.localStorage.setItem(capoKey(id), String(capo))
+    else window.localStorage.removeItem(capoKey(id))
+  } catch {
+    // private mode: the capo lasts until the page is closed
+  }
+}
+
 const SHARP_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
 const FLAT_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
 // The same key signatures as the server (chordify_core/theory.py): F# major, not Gb
@@ -58,10 +79,11 @@ function transposeChord(chord: ChordSegment, shift: number, flats: boolean): Cho
     bass: chord.bass ? transposeNote(chord.bass, shift, flats) : chord.bass,
     // 'Ab Mixolydian' -> 'G Mixolydian': the leading note moves like a label's root
     scale_hint: chord.scale_hint ? transposeLabel(chord.scale_hint, shift, flats) : chord.scale_hint,
-    alternatives: chord.alternatives.map((a) => ({
+    // results saved before the server filled in empty lists leave them out on "no chord" segments
+    alternatives: (chord.alternatives ?? []).map((a) => ({
       ...a, label: transposeLabel(a.label, shift, flats), display: transposeDisplay(a.display, shift, flats),
     })),
-    next: chord.next.map((p) => ({
+    next: (chord.next ?? []).map((p) => ({
       ...p, label: transposeLabel(p.label, shift, flats), display: transposeDisplay(p.display, shift, flats),
     })),
   }
@@ -78,11 +100,11 @@ export function withCapo(result: AnalysisResult, capo: number): AnalysisResult {
     key: {
       ...result.key,
       global: { ...result.key.global, tonic: key.tonic },
-      segments: result.key.segments.map((s) => ({ ...s, tonic: transposeNote(s.tonic, shift, key.flats) })),
+      segments: (result.key.segments ?? []).map((s) => ({ ...s, tonic: transposeNote(s.tonic, shift, key.flats) })),
     },
     chords: result.chords.map((c) => transposeChord(c, shift, key.flats)),
-    bars: result.bars.map((b) => ({ ...b, chords: b.chords.map(display) })),
-    summary: { ...result.summary, time_share: result.summary.time_share.map((s) => ({ ...s, display: display(s.display) })) },
+    bars: (result.bars ?? []).map((b) => ({ ...b, chords: b.chords.map(display) })),
+    summary: { ...result.summary, time_share: (result.summary.time_share ?? []).map((s) => ({ ...s, display: display(s.display) })) },
   }
 }
 

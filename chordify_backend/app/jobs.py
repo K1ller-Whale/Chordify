@@ -22,6 +22,7 @@ from .config import Settings
 from .errors import ApiError
 from .pipeline import analysis
 from .pipeline.models import Models
+from .schemas import AnalysisResult
 
 TERMINAL = {"completed", "failed", "cancelled"}
 
@@ -121,6 +122,9 @@ class JobManager:
                 sha256=job.sha256, no_music_threshold=self.settings.no_music_threshold,
                 progress=lambda s, f, p: self._progress(job, s, f, p),
                 should_cancel=lambda: job.cancel_requested, **job.options)
+            # Stored and served exactly as the schema declares: every list present, even where
+            # the pipeline leaves it out (a "no chord" segment has no predictions).
+            result = AnalysisResult.model_validate(result).model_dump(mode="json", by_alias=True)
             (self.results_dir / f"{job.id}.json").write_text(json.dumps(result, separators=(",", ":")))
             self._finish(job, "completed", {"result_url": f"/api/v2/analyses/{job.id}/result"})
         except analysis.Cancelled:

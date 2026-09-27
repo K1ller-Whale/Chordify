@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { saveCapo } from './lib/capo'
 import { AnalysisPage } from './pages/AnalysisPage'
 import { Home } from './pages/Home'
 import { QuickChord } from './pages/QuickChord'
@@ -23,6 +25,10 @@ export default function App() {
   else if (hash.startsWith('#/write')) page = <Songwriter />
   else page = <Home navigate={navigate} />
   const active = (prefix: string) => (hash.startsWith(prefix) ? 'page' : undefined)
+  const reset = () => {
+    if (analysis) saveCapo(analysis[1], 0)
+    window.location.reload()
+  }
   return (
     <div className="app">
       <nav className="topbar">
@@ -31,7 +37,9 @@ export default function App() {
         <a href="#/quick" aria-current={active('#/quick')}>Quick chord</a>
         <a href="#/write" aria-current={active('#/write')}>Songwriter</a>
       </nav>
-      <main>{page}</main>
+      <main>
+        <ErrorBoundary key={hash} onReset={reset}>{page}</ErrorBoundary>
+      </main>
     </div>
   )
 }

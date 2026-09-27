@@ -47,6 +47,21 @@ def test_result_follows_the_schema_and_finds_the_chords(loop_analysis):
     assert len(result["bars"]) >= 15 and result["bars"][1]["chords"]
 
 
+
+def test_every_chord_carries_the_schema_fields_even_without_a_chord(client):
+    # silence before and after the music decodes as "no chord", which has no predictions;
+    # the served result still has every field the schema declares (the web app maps over them)
+    data = wav_bytes([("N", 4.0)] + [(c, 2.0) for c in LOOP * 2] + [("N", 4.0)], bpm=None)
+    response = client.post("/api/v2/analyses", files={"file": ("silence.wav", data, "audio/wav")})
+    status = wait_for(client, response.json()["id"])
+    assert status["status"] == "completed", status
+    result = client.get(f"/api/v2/analyses/{status['id']}/result").json()
+    assert "N" in {c["label"] for c in result["chords"]}
+    required = set(AnalysisResult.model_json_schema()["$defs"]["ChordSegment"]["properties"])
+    for chord in result["chords"]:
+        assert required <= chord.keys(), (chord["label"], required - chord.keys())
+        assert isinstance(chord["next"], list) and isinstance(chord["alternatives"], list)
+
 def test_predictions_use_the_song_history(loop_analysis):
     _, _, result = loop_analysis
     chords = [c for c in result["chords"] if c["label"] != "N"]
