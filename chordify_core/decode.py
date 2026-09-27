@@ -32,13 +32,24 @@ def unit_boundaries(duration: float, beats: np.ndarray | None, frame_rate: float
                     subdivide: int = 1) -> np.ndarray:
     """Boundaries of decoding units: beat intervals (optionally subdivided), or frames.
 
-    Includes the span before the first beat and after the last one.
+    Before the first beat, after the last one and across gaps longer than 1.5 beats, the
+    grid continues at the median beat period, so an intro, a break or a fade-out without
+    beats (Billboard's annotated beats stop where the fade-out starts) is not decoded as
+    one long unit.
     """
     if beats is None or len(beats) < 2:
         n = int(np.ceil(duration * frame_rate))
         return np.arange(n + 1, dtype=np.float64) / frame_rate
     beats = np.asarray(beats, dtype=np.float64)
     beats = beats[(beats > 0) & (beats < duration)]
+    if len(beats) >= 2:
+        period = float(np.median(np.diff(beats)))
+        if period > 0:
+            head = np.arange(beats[0] - period, 0.0, -period)[::-1]
+            tail = np.arange(beats[-1] + period, duration, period)
+            gaps = [np.linspace(a, b, int(round((b - a) / period)) + 1)[1:-1]
+                    for a, b in zip(beats[:-1], beats[1:]) if b - a > 1.5 * period]
+            beats = np.unique(np.concatenate([head, beats, tail, *gaps]))
     points = [0.0]
     for a, b in zip(beats[:-1], beats[1:]):
         points.extend(a + (b - a) * np.arange(subdivide) / subdivide)

@@ -136,3 +136,13 @@ def test_frame_offset_shifts_frames_to_their_true_times():
     assert naive[1].start == pytest.approx(4.0)
     assert shifted[1].start == pytest.approx(4.0 + 0.0, abs=0.5) and shifted[1].start >= naive[1].start
     assert shifted[-1].end == pytest.approx(8.0 + offset)
+
+
+def test_beat_grid_continues_through_an_unbeaten_intro_and_fade_out():
+    beats = np.arange(2.0, 6.01, 0.5)  # beats only from 2 s to 6 s of a 9 s song
+    bounds = decode.unit_boundaries(9.0, beats, 21.5)
+    assert bounds[0] == 0.0 and bounds[-1] == 9.0
+    assert np.all(np.diff(bounds) <= 0.5 + 1e-9)  # no long unit before or after the beats
+    assert np.allclose(bounds[bounds > 6.0][:3], [6.5, 7.0, 7.5])
+    gap = decode.unit_boundaries(9.0, np.array([1.0, 1.5, 2.0, 5.0, 5.5]), 21.5)
+    assert np.all(np.diff(gap) <= 0.5 + 1e-9)  # a 3 s break between beats is split too
