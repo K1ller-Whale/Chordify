@@ -139,6 +139,14 @@ class TemplateChordModel:
         return AcousticOutput(chord=softmax(logits))
 
 
+DECODER_KEYS = ("alpha", "self_prob", "subdivide", "boundary_weight")
+
+
+def decoder_kwargs(model) -> dict:
+    """The model's decoder settings (a bundle's ``decoder`` block) that ``decode.decode`` takes."""
+    return {k: v for k, v in getattr(model, "decoder_params", {}).items() if k in DECODER_KEYS}
+
+
 def load_acoustic_model(reference: str | Path | None) -> OnnxChordModel | TemplateChordModel:
     """``None`` or ``"templates"`` -> TemplateChordModel; a directory -> ONNX bundle."""
     if reference in (None, "", "templates"):

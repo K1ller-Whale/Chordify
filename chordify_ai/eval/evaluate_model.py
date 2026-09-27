@@ -20,9 +20,11 @@ from ..data import billboard, splits
 from . import chords as chord_eval
 
 
-def segments_for(model, raw: np.ndarray, spec: features.FeatureSpec, beats: list[float], duration: float):
-    output = model.predict(raw)
-    params = {k: v for k, v in getattr(model, "decoder_params", {}).items() if k in ("alpha", "self_prob", "subdivide")}
+def segments_for(model, raw: np.ndarray, spec: features.FeatureSpec, beats: list[float], duration: float,
+                 output: acoustic.AcousticOutput | None = None, **overrides):
+    """Decode as the server does (first pass, no key yet); ``overrides`` replace decoder settings."""
+    output = output if output is not None else model.predict(raw)
+    params = acoustic.decoder_kwargs(model) | overrides
     segments = decode.decode(output.chord, spec.frame_rate, beats=np.asarray(beats) if len(beats) > 1 else None,
                              change_prob=output.boundary, prior=getattr(model, "prior", None),
                              frame_offset=spec.offset, duration=duration, **params)

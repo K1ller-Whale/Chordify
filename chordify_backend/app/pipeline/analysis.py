@@ -12,6 +12,7 @@ from typing import Callable
 import numpy as np
 
 from chordify_core import decode, features, lm, theory, vocab
+from chordify_core.acoustic import decoder_kwargs
 from chordify_core.theory import Key
 
 from .beats import BeatInfo, downbeat_phase, track_beats
@@ -37,7 +38,7 @@ def _check(should_cancel: Callable[[], bool]) -> None:
 def decode_chords(models: Models, posteriors: np.ndarray, boundary: np.ndarray | None, spec: features.FeatureSpec,
                   duration: float, beats: BeatInfo, key: Key | None = None, min_units: int = 1) -> list[decode.Segment]:
     """Beat-synchronous decoding; with ``key`` the progression model supplies the change prior."""
-    params = {k: v for k, v in models.acoustic.decoder_params.items() if k in ("alpha", "self_prob", "subdivide")}
+    params = decoder_kwargs(models.acoustic)
     matrix = None
     if key is not None:
         size = models.acoustic.vocabulary.size
