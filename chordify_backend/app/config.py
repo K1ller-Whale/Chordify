@@ -1,7 +1,7 @@
 """Settings from environment variables (prefix CHORDIFY_), e.g.
 
     CHORDIFY_ALLOWED_ORIGINS='["http://localhost:5173"]'
-    CHORDIFY_CHORD_MODEL=models/chordnet-chroma/2.0.0   # default: training-free chroma templates
+    CHORDIFY_CHORD_MODEL=templates    # default "auto": the shipped ChordNet bundle when NNLS works here
     CHORDIFY_MAX_UPLOAD_MB=50
 """
 from __future__ import annotations
@@ -22,7 +22,8 @@ class Settings(BaseSettings):
     max_duration_s: float = 900.0
     min_duration_s: float = 1.0
     decode_sample_rate: int = 44100
-    chord_model: str = "templates"
+    chord_model: str = "auto"  # "auto", "templates" or a ChordNet bundle directory
+    default_chord_bundle: str = str(REPO_ROOT / "models" / "chordnet-chroma" / "2.0.0")
     lm_model: str = str(REPO_ROOT / "models" / "progression-ngram" / "1.0.0")
     workers: int = 2
     data_dir: str = str(REPO_ROOT / "chordify_backend" / "var")

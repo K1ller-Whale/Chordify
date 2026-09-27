@@ -32,7 +32,7 @@ def wav_bytes(chords: list[tuple[str, float]], sr: int = 44100, bpm: float | Non
 
 @pytest.fixture(scope="session")
 def client(tmp_path_factory):
-    settings = Settings(data_dir=str(tmp_path_factory.mktemp("var")), warmup=False, max_upload_mb=5,
+    settings = Settings(data_dir=str(tmp_path_factory.mktemp("var")), warmup=False, max_upload_mb=5, chord_model="templates",
                         allowed_origins=["http://localhost:5173"])
     with TestClient(create_app(settings)) as test_client:
         yield test_client

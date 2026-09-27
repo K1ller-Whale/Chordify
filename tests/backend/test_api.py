@@ -153,3 +153,19 @@ def test_cache_key_changes_with_the_feature_revision():
     older = Models(acoustic=TemplateChordModel(replace(CQT_BOTHCHROMA, revision=1)), lm=None, lm_id="lm@1")
     assert current.ids == older.ids
     assert current.fingerprint != older.fingerprint
+
+
+def test_auto_uses_the_shipped_bundle_only_when_its_features_work_here(tmp_path, monkeypatch):
+    import json as json_module
+
+    from chordify_backend.app.pipeline import models as models_module
+
+    bundle = tmp_path / "chordnet"
+    bundle.mkdir()
+    (bundle / "bundle.json").write_text(json_module.dumps({"features": {"kind": "nnls_bothchroma"}}))
+    monkeypatch.setattr(models_module.features, "nnls_available", lambda: True)
+    assert models_module.resolve_chord_model("auto", bundle) == str(bundle)
+    monkeypatch.setattr(models_module.features, "nnls_available", lambda: False)
+    assert models_module.resolve_chord_model("auto", bundle) == "templates"
+    assert models_module.resolve_chord_model("auto", tmp_path / "missing") == "templates"
+    assert models_module.resolve_chord_model("templates", bundle) == "templates"

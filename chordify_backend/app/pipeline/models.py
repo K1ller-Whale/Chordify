@@ -6,11 +6,25 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from chordify_core import features
 from chordify_core.acoustic import OnnxChordModel, TemplateChordModel, load_acoustic_model
 from chordify_core.lm import NgramProgressionModel
 
 from ..config import Settings
 from .beats import TRACKER_ID
+
+
+def resolve_chord_model(reference: str, default_bundle: str | Path) -> str:
+    """``auto`` means the shipped ChordNet bundle if its features can be extracted on this
+    machine (NNLS needs the Vamp plugin), otherwise the training-free templates."""
+    if reference != "auto":
+        return reference
+    bundle = Path(default_bundle) / "bundle.json"
+    if bundle.exists():
+        kind = json.loads(bundle.read_text())["features"]["kind"]
+        if kind != "nnls_bothchroma" or features.nnls_available():
+            return str(default_bundle)
+    return "templates"
 
 
 @dataclass
@@ -33,7 +47,7 @@ class Models:
 
     @classmethod
     def load(cls, settings: Settings) -> "Models":
-        acoustic = load_acoustic_model(settings.chord_model)
+        acoustic = load_acoustic_model(resolve_chord_model(settings.chord_model, settings.default_chord_bundle))
         lm_dir = Path(settings.lm_model)
         bundle = json.loads((lm_dir / "bundle.json").read_text())
         lm = NgramProgressionModel.load(lm_dir / bundle["files"]["model"])
