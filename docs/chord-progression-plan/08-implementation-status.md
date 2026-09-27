@@ -9,17 +9,19 @@ clone: see [§6](#6-running-it).
   <img alt="The analysis screen of the rebuilt web app" src="assets/app-desktop-light.png">
 </picture>
 
-*The built analysis screen (not the mockup). It shows a 4 min 56 s synthetic render
-of a D–A–Bm–G song, analysed by the v2 API with NNLS chroma, the template chord model
-and the n-gram progression model. Key D major, 108 BPM, the loop found as
-"I–V–vi–IV (Axis) ×17", Bm predicted next at 76 %.*
+*The built analysis screen (not the mockup), on a real recording: GuitarSet take
+`00_Rock1-90-C#_comp` (CC BY 4.0), analysed by the v2 API with NNLS chroma,
+`chordnet-chroma@2.0.0` and the n-gram progression model. The chords C#–F#–C#–G#–F#–C#
+come out right, spelled Db–Gb–Db–Ab–Gb–Db in the key the app found (Db major), and the
+next chord is predicted correctly. The tempo is not: 123 BPM for a 90 BPM take, a known
+weakness of the beat tracker ([§4](#4-where-the-build-differs-from-the-plan)).*
 
 ## 1. Status by phase
 
 | Phase | Built in this PR | Still open |
 |---|---|---|
 | **0 · Foundations** | `chordify_core` package. One feature definition shared by training and serving: NNLS at 44.1 kHz/2048, plus a plugin-free CQT chroma. Golden tests. Billboard ingestion. Frozen artist-grouped splits. `mir_eval` harness. Backend hygiene (settings, CORS allow-list, problem+json, no files on disk). Configurable API URL in the web app. CI. | Chordino baseline and honest v1 numbers on the test split. The Chordify-Live recordings. |
-| **1 · Full-song v2** | ChordNet in PyTorch (Conformer and BiGRU, every head), training, ONNX export with a parity check, model bundles. Beat-synchronous Viterbi decoder. API v2 with jobs, SSE, cache and v1 adapter. TypeScript web app with upload, progress, timeline and playback sync. | Training ChordNet on real Billboard features and passing the gates ([§3.4](#34-acoustic-model)). Beat This!. Celery, Postgres and object storage ([§4](#4-where-the-build-differs-from-the-plan)). |
+| **1 · Full-song v2** | ChordNet in PyTorch (Conformer and BiGRU, every head), training, ONNX export with a parity check, model bundles. Beat-synchronous Viterbi decoder. API v2 with jobs, SSE, cache and v1 adapter. TypeScript web app with upload, progress, timeline and playback sync. **`chordnet-chroma@2.0.0` trained on Billboard and served by default** ([§3.4](#34-acoustic-model)). | Beat This! (librosa's tempo can be off, e.g. 123 BPM on a 90 BPM take). Celery, Postgres and object storage ([§4](#4-where-the-build-differs-from-the-plan)). |
 | **2 · Progressions** | Theory engine: Roman numerals, functions, cadences, secondary dominants, borrowed chords, named loops, scale hints. n-gram + song-cache model: `/progressions/next`, predictions, surprise and predictability in every result, and a change matrix in the decoder. Web: Now/Next, circle of fifths, time per chord, repeating progressions, lead sheet, Roman/Letters, Songwriter. Corrections endpoint. | The ProgressionLM Transformer (Chordonomicon). Local keys and modulations. `sevenths` in serving. Practice mode. Corrections UI. |
 | **3–5** | Nothing yet beyond what they reuse: vocabulary tiers up to 169 classes, the `log_cqt` feature spec, the AudioWorklet recorder. | All. |
 
@@ -96,11 +98,20 @@ majmin WCSR on real music:
 |---|---|---|---|---|
 | templates 0.1.0 (decoder untuned) | 61.1 % | 68.2 % | 65.1 % | 50.0 % |
 | templates 0.2.0 (decoder tuned on validation), **served today** | 66.4 % | 71.4 % | 66.5 % | 56.0 % |
-| ChordNet Conformer, first run stopped after 4 of up to 30 epochs (trainer's untuned decoder) | 75.6 % | not scored | not scored | — |
+| **`chordnet-chroma@2.0.0`** (decoder tuned on validation), **served by default** | **81.4 %** | **80.5 %** | **76.1 %** | — |
 
-After 4 epochs ChordNet is already 9 points above the tuned templates on the validation songs. The full run moves to a team laptop ([`chordify_ai/TRAINING.md`](../../chordify_ai/TRAINING.md)). The test split gets scored once, after the decoder has been tuned on validation.
+ChordNet-Chroma 2.0.0 is a 3.6 M-parameter Conformer trained on the 711 Billboard training songs. It was trained on a MacBook with an M5 Pro through the Apple GPU, at 42 s per epoch; early stopping ended the run at epoch 17 and kept epoch 11 ([`chordify_ai/TRAINING.md`](../../chordify_ai/TRAINING.md)). The decoder was then tuned on validation and the test split scored once. On Billboard test, root accuracy is 83.7 %, sevenths 61.6 % (the `majmin` vocabulary maps G:7 to G) and segmentation 0.80, which is the phase 1 `seg` target. The server picks the model by itself where the NNLS plugin works (`CHORDIFY_CHORD_MODEL=auto`) and falls back to the templates elsewhere.
 
-By style on GuitarSet (templates 0.2.0, NNLS): singer-songwriter 89 %, rock 85 %, bossa nova 59 %, jazz 46 %, funk 44 %. Quiet, jazzy comping is where a trained model has to earn its keep.
+GuitarSet by style (majmin, NNLS):
+
+| | singer-songwriter | rock | bossa nova | jazz | funk |
+|---|---|---|---|---|---|
+| templates 0.2.0 | 88.5 % | 85.0 % | 58.7 % | 45.8 % | 44.2 % |
+| ChordNet 2.0.0 | 90.5 % | 86.3 % | 71.9 % | 66.2 % | 59.7 % |
+
+On this real audio the model gains the most exactly where the templates struggled: quiet, jazzy comping. The recordings go through our own NNLS extraction, not McGill's CSVs, so this also confirms that serving produces the features the model was trained on.
+
+One caveat seen while checking the demo song. On a chord with no third (A–D–E–G, an A7sus4), the templates and ChordNet disagree about major versus minor. The audio can't settle that, and `majmin` scoring leaves such chords out.
 
 **Synthetic renders** of the validation annotations (25 songs, first 90 s, each render with its own timbre and tuning within ±30 cents), measured with the 0.1.0 template settings:
 
@@ -116,15 +127,16 @@ This benchmark found one real bug. The CQT chroma kept a bin a third of a semito
 
 ### 3.5 Latency
 
-Full analysis of the 296 s song in the screenshot on a 4-vCPU container, warm, two runs each. Every stage is included: decode, beats, features, model, both decoder passes, key, theory, predictions.
+Full analysis of a 296 s synthetic song on a 4-vCPU container, warm, two runs each. Every stage is included: decode, beats, features, model, both decoder passes, key, theory, predictions.
 
 | Chord model | Features | Time |
 |---|---|---|
 | templates | NNLS | 5.4–5.8 s |
 | templates | CQT | 3.2–3.4 s |
-| ChordNet Conformer (ONNX Runtime) | CQT | 3.6–4.1 s |
+| ChordNet Conformer, synthetic-trained (ONNX Runtime) | CQT | 3.6–4.1 s |
+| **`chordnet-chroma@2.0.0`** (ONNX Runtime), served by default | NNLS | 7.8 s |
 
-The phase 1 budget is p95 ≤ 20 s for a 4-minute song. Switching features from CQT to NNLS costs about 2 s; switching the model from templates to ChordNet costs about 0.5 s.
+The phase 1 budget is p95 ≤ 20 s for a 4-minute song. Switching features from CQT to NNLS costs about 2 s. ChordNet with half-beat decoding units costs 2–3 s more than the templates.
 
 ## 4. Where the build differs from the plan
 
@@ -134,13 +146,13 @@ The phase 1 budget is p95 ≤ 20 s for a 4-minute song. Switching features from 
 | `models/registry.yaml` | One `bundle.json` per model (id, feature spec, vocabulary, file hashes, metrics, decoder parameters), selected by `CHORDIFY_CHORD_MODEL` / `CHORDIFY_LM_MODEL` | Same information without a second file to keep in sync | There are several deployments with different active models |
 | DVC-tracked data, MLflow, Lightning | Frozen split JSON in git. ChoCo loaded directly with a local JSON cache. A plain PyTorch loop that writes `history.json`, `best.pt` and the bundle. | Nothing to host. The split and the n-gram bundle carry hashes. | More than one person trains models |
 | Beat This! beat tracker | `librosa.beat.beat_track` (downbeat phase from chord-change alignment) | Already a dependency and fast. Beat This! adds a PyTorch model to serving. | Beat accuracy is measured on real audio |
-| Key HMM with local keys | Global key from the decoded chords (duration-weighted Krumhansl–Kessler), then a second decoder pass with the key-relative LM | Enough for Roman numerals and predictions. ChordNet's key heads are trained but not used by the templates. | ChordNet serves (use its key heads), or modulations matter in the UI |
+| Key HMM with local keys | Global key from the decoded chords (duration-weighted Krumhansl–Kessler), then a second decoder pass with the key-relative LM | Enough for Roman numerals and predictions. ChordNet's key heads are trained, but serving does not read them yet. | Modulations matter in the UI (the key heads are ready) |
 | ProgressionLM distilled into the decoder | The n-gram's key-relative change matrix, blended 50/50 with uniform | Same interface (`lm.change_matrix`), so the Transformer can drop in | ProgressionLM exists |
 | TanStack Query + Zustand | Plain hooks. One `PlaybackClock` read through `useSyncExternalStore`, so only the components whose chord or bar changed re-render. | Two fewer dependencies for one page of server state | The app grows more pages with shared server state |
 
 ## 5. Next steps, in order
 
-1. **Train ChordNet on the full Billboard set.** Follow [`chordify_ai/TRAINING.md`](../../chordify_ai/TRAINING.md): setup, one-command download, training on an Apple-silicon Mac (GPU), Linux or NVIDIA, then decoder tuning on validation and a single test score. Ship the bundle only if it beats the templates' 71.4 % on the test songs; the server then picks it up by itself (`CHORDIFY_CHORD_MODEL=auto`). Then run `chordify_ai.eval.guitarset` for the real-audio check.
+1. **Improve ChordNet.** 2.0.0 ships (Billboard test 80.5 %, GuitarSet 76.1 %). Next: train the `sevenths` vocabulary (`--vocabulary sevenths`) so G7 is no longer reported as G, and read the key heads for local keys. Every retrain follows [`chordify_ai/TRAINING.md`](../../chordify_ai/TRAINING.md) and must beat the shipped bundle on the test songs and on GuitarSet.
 2. **Baselines for the gate.** Chordino (`nnls-chroma:chordino`, built by `tools/install_nnls_chroma.sh`) takes audio, and Billboard ships only features. So on Billboard the like-for-like baseline is the template model through the same decoder (`evaluate_model --model templates --chroma …`, [§3.4](#34-acoustic-model)); Chordino proper runs on GuitarSet and the Chordify-Live audio from step 3.
 3. **Chordify-Live.** Record and label the phone/guitar test set ([02 §5](02-datasets.md)): the only in-domain measure for the Quick chord screen.
 4. **ProgressionLM.** Ingest Chordonomicon + ChoCo symbolic, train the Transformer, and gate it against [§3.3](#33-progression-model-the-gate-progressionlm-has-to-beat).

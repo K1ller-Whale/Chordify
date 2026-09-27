@@ -64,9 +64,12 @@ epoch   4  chord loss 1.497  boundary 0.772  val majmin 75.6  seg 71.0  (406.2 s
 ```
 
 `val majmin` is the share of the validation songs' time labelled with the right chord.
-For reference, a cloud run on 3 CPU cores (about 7 minutes per epoch) reached
-67.4, 73.9, 74.6 and 75.6 % in epochs 1–4 before it was stopped. The template model the
-app uses today scores 66.4 % on the same songs.
+The template model scores 66.4 % on the same songs.
+
+Reference run (`chordnet-chroma@2.0.0`, MacBook with an M5 Pro, Apple GPU): 42 s per
+epoch, 68.4 % after epoch 1, best 79.5 % at epoch 11, early stop at epoch 17, about
+12 minutes in all. After step 5: 81.4 % on validation; step 6: 80.5 % on test. The same
+run on 3 cloud CPU cores took about 7 minutes per epoch.
 
 Training runs up to 30 epochs and stops early once 6 epochs pass without improvement.
 Multiply the seconds of your first epoch by about 20 for a rough total. Pressing Ctrl-C
