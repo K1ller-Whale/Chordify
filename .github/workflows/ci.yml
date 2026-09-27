@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel numpy
+          pip install -r chordify_backend/requirements.txt pytest httpx mir_eval
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install onnx
+      - name: Build the NNLS Chroma Vamp plugin (Billboard-compatible features)
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q libboost-dev
+          pip install --no-build-isolation vamp
+          bash tools/install_nnls_chroma.sh
+          python -c "from chordify_core.features import nnls_available; assert nnls_available()"
+      - name: Test
+        run: pytest -q
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: chordify-frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: chordify-frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build

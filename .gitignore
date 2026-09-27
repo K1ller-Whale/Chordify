@@ -16,6 +16,7 @@ eggs/
 .eggs/
 lib/
 lib64/
+!chordify-frontend/src/lib/
 parts/
 sdist/
 var/
@@ -212,6 +213,11 @@ Thumbs.db
 # Project-specific exclusions
 chordify_ai/assets/chord_dict.pkl
 chordify_ai/assets/label_map.pkl
-# Ignore generated chroma images inside backend
-chordify_backend/chordify_backend/src/chromas/*.png
-chordify_backend/chordify_backend/src/chromas/
+# Backend runtime data (results, corrections)
+chordify_backend/var/
+
+# Datasets, feature caches and training runs (DVC/remote storage, not git)
+data/raw/
+data/features/
+data/cache/
+runs/

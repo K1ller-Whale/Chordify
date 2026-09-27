@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chordify"
+version = "0.2.0"
+description = "Chord and progression recognition: shared core library (chordify_core) and training code (chordify_ai)"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+audio = ["scipy>=1.10", "librosa>=0.10", "soundfile>=0.12"]
+nnls = ["vamp>=1.1"]  # also needs the nnls-chroma Vamp plugin binary on VAMP_PATH
+train = ["torch>=2.2", "jams>=0.3.4", "mir_eval>=0.7", "onnx>=1.15", "onnxruntime>=1.17"]
+dev = ["pytest>=8", "mir_eval>=0.7"]
+
+[tool.setuptools.packages.find]
+include = ["chordify_core*", "chordify_ai*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

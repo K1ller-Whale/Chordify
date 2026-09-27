@@ -1,0 +1,1682 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "Chordify API",
+  "description": "Chord timelines, keys and next-chord predictions. See docs/chord-progression-plan.",
+  "version": "2.0.0"
+ },
+ "paths": {
+  "/healthz": {
+   "get": {
+    "tags": [
+     "system"
+    ],
+    "summary": "Healthz",
+    "operationId": "healthz_healthz_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/readyz": {
+   "get": {
+    "tags": [
+     "system"
+    ],
+    "summary": "Readyz",
+    "operationId": "readyz_readyz_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v2/models": {
+   "get": {
+    "tags": [
+     "system"
+    ],
+    "summary": "Models Info",
+    "operationId": "models_info_api_v2_models_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v2/analyses": {
+   "get": {
+    "tags": [
+     "analyses"
+    ],
+    "summary": "List Analyses",
+    "operationId": "list_analyses_api_v2_analyses_get",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/AnalysisStatus"
+         },
+         "type": "array",
+         "title": "Response List Analyses Api V2 Analyses Get"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "analyses"
+    ],
+    "summary": "Create Analysis",
+    "description": "Upload audio (multipart ``file`` + optional ``options`` JSON) and start an analysis.",
+    "operationId": "create_analysis_api_v2_analyses_post",
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_create_analysis_api_v2_analyses_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "202": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AnalysisStatus"
+        }
+       }
+      }
+     },
+     "200": {
+      "description": "Cache hit: this audio was already analysed",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AnalysisStatus"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v2/analyses/{analysis_id}": {
+   "get": {
+    "tags": [
+     "analyses"
+    ],
+    "summary": "Get Analysis",
+    "operationId": "get_analysis_api_v2_analyses__analysis_id__get",
+    "parameters": [
+     {
+      "name": "analysis_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Analysis Id"
+      }
+     },
+     {
+      "name": "if-none-match",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "If-None-Match"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AnalysisStatus"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "delete": {
+    "tags": [
+     "analyses"
+    ],
+    "summary": "Delete Analysis",
+    "operationId": "delete_analysis_api_v2_analyses__analysis_id__delete",
+    "parameters": [
+     {
+      "name": "analysis_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Analysis Id"
+      }
+     }
+    ],
+    "responses": {
+     "204": {
+      "description": "Successful Response"
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v2/analyses/{analysis_id}/result": {
+   "get": {
+    "tags": [
+     "analyses"
+    ],
+    "summary": "Get Result",
+    "operationId": "get_result_api_v2_analyses__analysis_id__result_get",
+    "parameters": [
+     {
+      "name": "analysis_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Analysis Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/AnalysisResult"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v2/analyses/{analysis_id}/events": {
+   "get": {
+    "tags": [
+     "analyses"
+    ],
+    "summary": "Stream Events",
+    "description": "Server-Sent Events: ``snapshot`` first, then ``progress``/``partial`` and a final\n``completed``/``failed``/``cancelled``. Resumable with ``Last-Event-ID``.",
+    "operationId": "stream_events_api_v2_analyses__analysis_id__events_get",
+    "parameters": [
+     {
+      "name": "analysis_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Analysis Id"
+      }
+     },
+     {
+      "name": "last-event-id",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Last-Event-Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v2/analyses/{analysis_id}/export": {
+   "get": {
+    "tags": [
+     "analyses"
+    ],
+    "summary": "Export",
+    "operationId": "export_api_v2_analyses__analysis_id__export_get",
+    "parameters": [
+     {
+      "name": "analysis_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Analysis Id"
+      }
+     },
+     {
+      "name": "format",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "lab",
+       "title": "Format"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v2/analyses/{analysis_id}/corrections": {
+   "post": {
+    "tags": [
+     "analyses"
+    ],
+    "summary": "Add Correction",
+    "description": "Store a user's chord fix. Used for training only with ``consent_for_training``.",
+    "operationId": "add_correction_api_v2_analyses__analysis_id__corrections_post",
+    "parameters": [
+     {
+      "name": "analysis_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Analysis Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Correction"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v2/progressions/next": {
+   "post": {
+    "tags": [
+     "progressions"
+    ],
+    "summary": "Next Chords",
+    "operationId": "next_chords_api_v2_progressions_next_post",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ProgressionRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/ProgressionResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/predict": {
+   "post": {
+    "tags": [
+     "v1 (deprecated)"
+    ],
+    "summary": "Predict",
+    "description": "One chord for a short clip (v1 shape: confidence in percent).",
+    "operationId": "predict_predict_post",
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_predict_predict_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LegacyChordPrediction"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/predict_time_stamps": {
+   "post": {
+    "tags": [
+     "v1 (deprecated)"
+    ],
+    "summary": "Predict Time Stamps",
+    "description": "One chord per user-supplied slice (v1 shape).",
+    "operationId": "predict_time_stamps_predict_time_stamps_post",
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_predict_time_stamps_predict_time_stamps_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/extract_full_chroma": {
+   "post": {
+    "tags": [
+     "v1 (deprecated)"
+    ],
+    "summary": "Extract Full Chroma",
+    "description": "Chromagram PNG, rendered in memory (v1 wrote a file per request and never deleted it).",
+    "operationId": "extract_full_chroma_extract_full_chroma_post",
+    "requestBody": {
+     "content": {
+      "multipart/form-data": {
+       "schema": {
+        "$ref": "#/components/schemas/Body_extract_full_chroma_extract_full_chroma_post"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "Alternative": {
+    "properties": {
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "display": {
+      "type": "string",
+      "title": "Display"
+     },
+     "p": {
+      "type": "number",
+      "title": "P"
+     }
+    },
+    "type": "object",
+    "required": [
+     "label",
+     "display",
+     "p"
+    ],
+    "title": "Alternative"
+   },
+   "AnalysisError": {
+    "properties": {
+     "code": {
+      "type": "string",
+      "title": "Code"
+     },
+     "message": {
+      "type": "string",
+      "title": "Message"
+     }
+    },
+    "type": "object",
+    "required": [
+     "code",
+     "message"
+    ],
+    "title": "AnalysisError"
+   },
+   "AnalysisResult": {
+    "properties": {
+     "schema_version": {
+      "type": "integer",
+      "title": "Schema Version",
+      "default": 1
+     },
+     "analysis_id": {
+      "type": "string",
+      "title": "Analysis Id"
+     },
+     "status": {
+      "type": "string",
+      "const": "completed",
+      "title": "Status",
+      "default": "completed"
+     },
+     "source": {
+      "$ref": "#/components/schemas/Source"
+     },
+     "models": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "type": "object",
+      "title": "Models"
+     },
+     "tempo": {
+      "$ref": "#/components/schemas/Tempo"
+     },
+     "key": {
+      "$ref": "#/components/schemas/KeySummary"
+     },
+     "beats": {
+      "items": {
+       "type": "number"
+      },
+      "type": "array",
+      "title": "Beats"
+     },
+     "downbeats": {
+      "items": {
+       "type": "number"
+      },
+      "type": "array",
+      "title": "Downbeats"
+     },
+     "bars": {
+      "items": {
+       "$ref": "#/components/schemas/Bar"
+      },
+      "type": "array",
+      "title": "Bars"
+     },
+     "sections": {
+      "items": {
+       "$ref": "#/components/schemas/Section"
+      },
+      "type": "array",
+      "title": "Sections",
+      "default": []
+     },
+     "chords": {
+      "items": {
+       "$ref": "#/components/schemas/ChordSegment"
+      },
+      "type": "array",
+      "title": "Chords"
+     },
+     "summary": {
+      "$ref": "#/components/schemas/Summary"
+     }
+    },
+    "type": "object",
+    "required": [
+     "analysis_id",
+     "source",
+     "models",
+     "tempo",
+     "key",
+     "beats",
+     "downbeats",
+     "bars",
+     "chords",
+     "summary"
+    ],
+    "title": "AnalysisResult"
+   },
+   "AnalysisStatus": {
+    "properties": {
+     "id": {
+      "type": "string",
+      "title": "Id"
+     },
+     "status": {
+      "type": "string",
+      "enum": [
+       "queued",
+       "running",
+       "completed",
+       "failed",
+       "cancelled"
+      ],
+      "title": "Status"
+     },
+     "stage": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stage"
+     },
+     "progress": {
+      "type": "number",
+      "title": "Progress",
+      "default": 0.0
+     },
+     "filename": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Filename"
+     },
+     "created_at": {
+      "type": "string",
+      "title": "Created At"
+     },
+     "error": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/AnalysisError"
+       },
+       {
+        "type": "null"
+       }
+      ]
+     },
+     "links": {
+      "$ref": "#/components/schemas/Links"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "status",
+     "created_at",
+     "links"
+    ],
+    "title": "AnalysisStatus"
+   },
+   "Bar": {
+    "properties": {
+     "start": {
+      "type": "number",
+      "title": "Start"
+     },
+     "end": {
+      "type": "number",
+      "title": "End"
+     },
+     "chords": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Chords"
+     }
+    },
+    "type": "object",
+    "required": [
+     "start",
+     "end",
+     "chords"
+    ],
+    "title": "Bar"
+   },
+   "Body_create_analysis_api_v2_analyses_post": {
+    "properties": {
+     "file": {
+      "type": "string",
+      "contentMediaType": "application/octet-stream",
+      "title": "File"
+     },
+     "options": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Options"
+     }
+    },
+    "type": "object",
+    "required": [
+     "file"
+    ],
+    "title": "Body_create_analysis_api_v2_analyses_post"
+   },
+   "Body_extract_full_chroma_extract_full_chroma_post": {
+    "properties": {
+     "file": {
+      "type": "string",
+      "contentMediaType": "application/octet-stream",
+      "title": "File"
+     }
+    },
+    "type": "object",
+    "required": [
+     "file"
+    ],
+    "title": "Body_extract_full_chroma_extract_full_chroma_post"
+   },
+   "Body_predict_predict_post": {
+    "properties": {
+     "file": {
+      "type": "string",
+      "contentMediaType": "application/octet-stream",
+      "title": "File"
+     }
+    },
+    "type": "object",
+    "required": [
+     "file"
+    ],
+    "title": "Body_predict_predict_post"
+   },
+   "Body_predict_time_stamps_predict_time_stamps_post": {
+    "properties": {
+     "file": {
+      "type": "string",
+      "contentMediaType": "application/octet-stream",
+      "title": "File"
+     },
+     "timestamps": {
+      "type": "string",
+      "title": "Timestamps"
+     }
+    },
+    "type": "object",
+    "required": [
+     "file",
+     "timestamps"
+    ],
+    "title": "Body_predict_time_stamps_predict_time_stamps_post"
+   },
+   "ChordSegment": {
+    "properties": {
+     "index": {
+      "type": "integer",
+      "title": "Index"
+     },
+     "start": {
+      "type": "number",
+      "title": "Start"
+     },
+     "end": {
+      "type": "number",
+      "title": "End"
+     },
+     "beats": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Beats"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "display": {
+      "type": "string",
+      "title": "Display"
+     },
+     "root": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Root"
+     },
+     "quality": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Quality"
+     },
+     "bass": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bass"
+     },
+     "roman": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Roman"
+     },
+     "function": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Function"
+     },
+     "scale_hint": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Scale Hint"
+     },
+     "confidence": {
+      "type": "number",
+      "title": "Confidence"
+     },
+     "alternatives": {
+      "items": {
+       "$ref": "#/components/schemas/Alternative"
+      },
+      "type": "array",
+      "title": "Alternatives",
+      "default": []
+     },
+     "next": {
+      "items": {
+       "$ref": "#/components/schemas/Prediction"
+      },
+      "type": "array",
+      "title": "Next",
+      "default": []
+     },
+     "theory_only": {
+      "items": {
+       "$ref": "#/components/schemas/PriorEntry"
+      },
+      "type": "array",
+      "title": "Theory Only",
+      "default": []
+     },
+     "surprise": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Surprise"
+     }
+    },
+    "type": "object",
+    "required": [
+     "index",
+     "start",
+     "end",
+     "label",
+     "display",
+     "confidence"
+    ],
+    "title": "ChordSegment"
+   },
+   "Correction": {
+    "properties": {
+     "chord_index": {
+      "type": "integer",
+      "minimum": 0.0,
+      "title": "Chord Index"
+     },
+     "new_label": {
+      "type": "string",
+      "title": "New Label"
+     },
+     "start": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Start"
+     },
+     "end": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "End"
+     },
+     "consent_for_training": {
+      "type": "boolean",
+      "title": "Consent For Training",
+      "default": false
+     }
+    },
+    "type": "object",
+    "required": [
+     "chord_index",
+     "new_label"
+    ],
+    "title": "Correction"
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "type": "array",
+      "title": "Detail"
+     }
+    },
+    "type": "object",
+    "title": "HTTPValidationError"
+   },
+   "KeyInfo": {
+    "properties": {
+     "tonic": {
+      "type": "string",
+      "title": "Tonic"
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "major",
+       "minor",
+       "unknown"
+      ],
+      "title": "Mode"
+     },
+     "confidence": {
+      "type": "number",
+      "title": "Confidence",
+      "default": 0.0
+     }
+    },
+    "type": "object",
+    "required": [
+     "tonic",
+     "mode"
+    ],
+    "title": "KeyInfo"
+   },
+   "KeySegment": {
+    "properties": {
+     "tonic": {
+      "type": "string",
+      "title": "Tonic"
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "major",
+       "minor",
+       "unknown"
+      ],
+      "title": "Mode"
+     },
+     "confidence": {
+      "type": "number",
+      "title": "Confidence",
+      "default": 0.0
+     },
+     "start": {
+      "type": "number",
+      "title": "Start"
+     },
+     "end": {
+      "type": "number",
+      "title": "End"
+     }
+    },
+    "type": "object",
+    "required": [
+     "tonic",
+     "mode",
+     "start",
+     "end"
+    ],
+    "title": "KeySegment"
+   },
+   "KeySummary": {
+    "properties": {
+     "global": {
+      "$ref": "#/components/schemas/KeyInfo"
+     },
+     "segments": {
+      "items": {
+       "$ref": "#/components/schemas/KeySegment"
+      },
+      "type": "array",
+      "title": "Segments"
+     }
+    },
+    "type": "object",
+    "required": [
+     "global",
+     "segments"
+    ],
+    "title": "KeySummary"
+   },
+   "LegacyChordPrediction": {
+    "properties": {
+     "chord": {
+      "type": "string",
+      "title": "Chord"
+     },
+     "confidence": {
+      "type": "number",
+      "title": "Confidence"
+     }
+    },
+    "type": "object",
+    "required": [
+     "chord",
+     "confidence"
+    ],
+    "title": "LegacyChordPrediction"
+   },
+   "Links": {
+    "properties": {
+     "self": {
+      "type": "string",
+      "title": "Self"
+     },
+     "events": {
+      "type": "string",
+      "title": "Events"
+     },
+     "result": {
+      "type": "string",
+      "title": "Result"
+     }
+    },
+    "type": "object",
+    "required": [
+     "self",
+     "events",
+     "result"
+    ],
+    "title": "Links"
+   },
+   "Pattern": {
+    "properties": {
+     "roman": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Roman"
+     },
+     "name": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Name"
+     },
+     "count": {
+      "type": "integer",
+      "title": "Count"
+     }
+    },
+    "type": "object",
+    "required": [
+     "roman",
+     "count"
+    ],
+    "title": "Pattern"
+   },
+   "Prediction": {
+    "properties": {
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "display": {
+      "type": "string",
+      "title": "Display"
+     },
+     "roman": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Roman"
+     },
+     "p": {
+      "type": "number",
+      "title": "P"
+     },
+     "reason": {
+      "type": "string",
+      "title": "Reason"
+     },
+     "cache_count": {
+      "type": "integer",
+      "title": "Cache Count",
+      "default": 0
+     },
+     "expected_beats": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expected Beats"
+     }
+    },
+    "type": "object",
+    "required": [
+     "label",
+     "display",
+     "p",
+     "reason"
+    ],
+    "title": "Prediction"
+   },
+   "PriorEntry": {
+    "properties": {
+     "roman": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Roman"
+     },
+     "p": {
+      "type": "number",
+      "title": "P"
+     }
+    },
+    "type": "object",
+    "required": [
+     "roman",
+     "p"
+    ],
+    "title": "PriorEntry"
+   },
+   "ProgressionKey": {
+    "properties": {
+     "tonic": {
+      "type": "string",
+      "title": "Tonic"
+     },
+     "mode": {
+      "type": "string",
+      "enum": [
+       "major",
+       "minor",
+       "unknown"
+      ],
+      "title": "Mode"
+     },
+     "confidence": {
+      "type": "number",
+      "title": "Confidence",
+      "default": 0.0
+     },
+     "estimated": {
+      "type": "boolean",
+      "title": "Estimated"
+     }
+    },
+    "type": "object",
+    "required": [
+     "tonic",
+     "mode",
+     "estimated"
+    ],
+    "title": "ProgressionKey"
+   },
+   "ProgressionRequest": {
+    "properties": {
+     "chords": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "maxItems": 512,
+      "minItems": 1,
+      "title": "Chords",
+      "description": "Chord names ('G', 'Em', 'D7', 'C/E') or Harte labels ('G:maj')"
+     },
+     "durations_beats": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "number"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Durations Beats"
+     },
+     "key": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Key",
+      "description": "e.g. 'G', 'G major', 'Em'; estimated from the chords when omitted"
+     },
+     "k": {
+      "type": "integer",
+      "maximum": 10.0,
+      "minimum": 1.0,
+      "title": "K",
+      "default": 3
+     }
+    },
+    "type": "object",
+    "required": [
+     "chords"
+    ],
+    "title": "ProgressionRequest"
+   },
+   "ProgressionResponse": {
+    "properties": {
+     "key_used": {
+      "$ref": "#/components/schemas/ProgressionKey"
+     },
+     "predictions": {
+      "items": {
+       "$ref": "#/components/schemas/Prediction"
+      },
+      "type": "array",
+      "title": "Predictions"
+     },
+     "theory_only": {
+      "items": {
+       "$ref": "#/components/schemas/PriorEntry"
+      },
+      "type": "array",
+      "title": "Theory Only"
+     },
+     "model": {
+      "type": "string",
+      "title": "Model"
+     }
+    },
+    "type": "object",
+    "required": [
+     "key_used",
+     "predictions",
+     "theory_only",
+     "model"
+    ],
+    "title": "ProgressionResponse"
+   },
+   "Section": {
+    "properties": {
+     "letter": {
+      "type": "string",
+      "title": "Letter"
+     },
+     "label": {
+      "type": "string",
+      "title": "Label"
+     },
+     "start": {
+      "type": "number",
+      "title": "Start"
+     },
+     "end": {
+      "type": "number",
+      "title": "End"
+     }
+    },
+    "type": "object",
+    "required": [
+     "letter",
+     "label",
+     "start",
+     "end"
+    ],
+    "title": "Section"
+   },
+   "Source": {
+    "properties": {
+     "filename": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Filename"
+     },
+     "title": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Title"
+     },
+     "artist": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Artist"
+     },
+     "duration": {
+      "type": "number",
+      "title": "Duration"
+     },
+     "sha256": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sha256"
+     }
+    },
+    "type": "object",
+    "required": [
+     "duration"
+    ],
+    "title": "Source"
+   },
+   "Summary": {
+    "properties": {
+     "unique_chords": {
+      "type": "integer",
+      "title": "Unique Chords"
+     },
+     "time_share": {
+      "items": {
+       "$ref": "#/components/schemas/TimeShare"
+      },
+      "type": "array",
+      "title": "Time Share"
+     },
+     "patterns": {
+      "items": {
+       "$ref": "#/components/schemas/Pattern"
+      },
+      "type": "array",
+      "title": "Patterns"
+     },
+     "predictability": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Predictability"
+     }
+    },
+    "type": "object",
+    "required": [
+     "unique_chords",
+     "time_share",
+     "patterns"
+    ],
+    "title": "Summary"
+   },
+   "Tempo": {
+    "properties": {
+     "bpm": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bpm"
+     },
+     "meter": {
+      "type": "string",
+      "title": "Meter"
+     },
+     "confidence": {
+      "type": "number",
+      "title": "Confidence",
+      "default": 0.0
+     }
+    },
+    "type": "object",
+    "required": [
+     "bpm",
+     "meter"
+    ],
+    "title": "Tempo"
+   },
+   "TimeShare": {
+    "properties": {
+     "display": {
+      "type": "string",
+      "title": "Display"
+     },
+     "seconds": {
+      "type": "number",
+      "title": "Seconds"
+     },
+     "share": {
+      "type": "number",
+      "title": "Share"
+     }
+    },
+    "type": "object",
+    "required": [
+     "display",
+     "seconds",
+     "share"
+    ],
+    "title": "TimeShare"
+   },
+   "ValidationError": {
+    "properties": {
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "type": "array",
+      "title": "Location"
+     },
+     "msg": {
+      "type": "string",
+      "title": "Message"
+     },
+     "type": {
+      "type": "string",
+      "title": "Error Type"
+     },
+     "input": {
+      "title": "Input"
+     },
+     "ctx": {
+      "type": "object",
+      "title": "Context"
+     }
+    },
+    "type": "object",
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError"
+   }
+  }
+ }
+}

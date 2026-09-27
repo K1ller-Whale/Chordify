@@ -1,0 +1,104 @@
+{
+ "id": "chordnet-chroma@2.0.0",
+ "role": "chord",
+ "type": "chordnet",
+ "files": {
+  "model": "model.onnx",
+  "sha256": "8714d129d27c6f6376ce00b515fa7dd25553e63d76659ee66d85b5f38acfaa77"
+ },
+ "features": {
+  "kind": "nnls_bothchroma",
+  "sample_rate": 44100,
+  "hop": 2048,
+  "n_bins": 24,
+  "offset": 0.18575963718820862,
+  "revision": 1,
+  "frame_rate": 21.533203125
+ },
+ "normalisation": "bothchroma-v1",
+ "vocabulary": "majmin",
+ "outputs": [
+  "chord",
+  "root",
+  "bass",
+  "tones",
+  "key_tonic",
+  "key_mode",
+  "boundary"
+ ],
+ "model": {
+  "input": "bothchroma",
+  "n_features": 25,
+  "n_classes": 25,
+  "d_model": 192,
+  "encoder": "conformer",
+  "n_layers": 4,
+  "n_heads": 4,
+  "ff_mult": 4,
+  "conv_kernel": 15,
+  "dropout": 0.1
+ },
+ "inference": {
+  "window": 512,
+  "margin": 64
+ },
+ "decoder": {
+  "alpha": 0.0,
+  "subdivide": 2,
+  "min_units": 1,
+  "self_prob": 0.6,
+  "boundary_weight": 1.0,
+  "tuned_on": "billboard validation split"
+ },
+ "class_prior": [
+  0.060641,
+  0.060641,
+  0.060641,
+  0.060641,
+  0.060641,
+  0.060641,
+  0.060641,
+  0.060641,
+  0.060641,
+  0.060641,
+  0.060641,
+  0.060641,
+  0.018544,
+  0.018544,
+  0.018544,
+  0.018544,
+  0.018544,
+  0.018544,
+  0.018544,
+  0.018544,
+  0.018544,
+  0.018544,
+  0.018544,
+  0.018544,
+  0.049772
+ ],
+ "metrics": {
+  "validation": {
+   "tracks": 89.0,
+   "root": 0.8035324562216548,
+   "majmin": 0.7949055456145109,
+   "majmin_inv": 0.7712731600361673,
+   "sevenths": 0.5204963301311987,
+   "sevenths_inv": 0.5117591566860205,
+   "mirex": 0.7622535949473908,
+   "overseg": 0.9498793311068247,
+   "underseg": 0.7330196725954594,
+   "seg": 0.7198979817623085
+  },
+  "epoch": 11
+ },
+ "training_data": {
+  "source": "billboard",
+  "split": "billboard_v1.json",
+  "split_sha256": "9e6ee255912bfb51467911ced8740dfb8309ad4733f8ef711209483dcb1e36e2",
+  "train_songs": 711,
+  "validation_songs": 89
+ },
+ "onnx_parity_max_abs": 3.337860107421875e-06,
+ "created": "2026-09-27T07:59:28Z"
+}
