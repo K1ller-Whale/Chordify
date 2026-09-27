@@ -156,9 +156,13 @@ In the `Chordify` folder from step 1, with the virtual environment active:
 git fetch origin
 git checkout claude/large-vocabulary-chords
 brew install fluid-synth
-pip install pretty_midi
+pip install torch onnx mir_eval pretty_midi
 bash tools/get_extra_data.sh
 ```
+
+The `pip install` line is harmless if some of them are there already. It matters if you made a
+new virtual environment to run the app (say, to move to Python 3.11), because that one has no
+PyTorch yet.
 
 On Linux, use `sudo apt-get install fluidsynth` instead of `brew install fluid-synth`. The
 script downloads GuitarSet (about 700 MB), POP909 (about 150 MB) and the FluidR3_GM
