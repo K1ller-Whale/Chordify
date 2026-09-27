@@ -107,7 +107,7 @@ python scripts/make_figures.py
 
 # 3. Mockup data (embedded into mockup/analysis-view.html) and screenshots
 python scripts/make_mockup_data.py --choco /tmp/choco
-NODE_PATH=$(npm root -g) node scripts/screenshot_mockup.js   # needs the playwright package
+NODE_PATH=$(npm root -g) node scripts/screenshot_mockup.js
 ```
 
 ## Glossary

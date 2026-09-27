@@ -18,10 +18,15 @@ WAV, so its recordings do not need it). For Billboard-compatible NNLS chroma fea
 ChordNet model needs, build the plugin and install its Python host:
 
 ```bash
-# Linux: apt-get install libboost-dev      macOS: xcode-select --install && brew install boost
 bash tools/install_nnls_chroma.sh
+pip install --upgrade setuptools wheel numpy
 pip install --no-build-isolation vamp
+python -c "from chordify_core.features import nnls_available; print(nnls_available())"
 ```
+
+The build needs a C++ compiler and Boost headers: `apt-get install libboost-dev` on
+Debian/Ubuntu; the Xcode command line tools and `brew install boost` on macOS. The last
+line prints `True` when everything is in place.
 
 Without it the service uses the training-free template model on the plugin-free CQT
 chroma, and `GET /api/v2/models` shows which model is active.

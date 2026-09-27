@@ -10,12 +10,13 @@ there; if it fails, step 4 shows the one-flag fallback to the CPU.
 
 ## 1. One-time setup (about 10 minutes)
 
-You need `git` and Python 3.11 or 3.12 (on a Mac: `brew install python@3.11`).
+You need `git` and Python 3.11 or 3.12 (on a Mac: `brew install python@3.11`). The
+`git checkout` line is only needed until PR #1 is merged into `main`.
 
 ```bash
 git clone https://github.com/K1ller-Whale/Chordify.git
 cd Chordify
-git checkout claude/ecstatic-galileo-cfgdu9      # until PR #1 is merged into main
+git checkout claude/ecstatic-galileo-cfgdu9
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r chordify_backend/requirements.txt torch onnx mir_eval

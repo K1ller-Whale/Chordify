@@ -11,7 +11,8 @@
 #   Debian/Ubuntu: apt-get install libboost-dev
 #   macOS:         xcode-select --install; brew install boost
 # On Linux, export VAMP_PATH=<prefix> unless it is ~/vamp. On macOS the default folder is
-# already on the Vamp search path.
+# already on the Vamp search path. The Python host then installs with
+#   pip install --upgrade setuptools wheel numpy && pip install --no-build-isolation vamp
 set -euo pipefail
 
 OS="$(uname -s)"
@@ -35,7 +36,7 @@ if [ "$OS" = "Darwin" ]; then
   fi
   # The projects' own macOS makefiles target Intel and OS X 10.7; build for this machine instead.
   ARCH="-mmacosx-version-min=11.0 -arch $(uname -m)"
-  (cd "$WORK/vamp-plugin-sdk" && make -f otherbuilds/Makefile.osx ARCHFLAGS="$ARCH -stdlib=libc++" -j"$JOBS" sdkstatic >/dev/null)
+  (cd "$WORK/vamp-plugin-sdk" && make -f otherbuilds/Makefile.osx ARCHFLAGS="$ARCH" -j"$JOBS" sdkstatic >/dev/null)
   (cd "$WORK/nnls-chroma" && make -f Makefile.osx VAMP_SDK_DIR=../vamp-plugin-sdk BOOST_ROOT="$BOOST_INCLUDE" \
       ARCHFLAGS="$ARCH" -j"$JOBS" >/dev/null)
   LIBRARY="nnls-chroma.dylib"

@@ -163,14 +163,27 @@ The phase 1 budget is p95 ≤ 20 s for a 4-minute song. Switching features from 
 ## 6. Running it
 
 ```bash
-pip install -r chordify_backend/requirements.txt pytest httpx mir_eval
-pip install torch onnx                     # only for ChordNet training/export and its tests
-bash tools/install_nnls_chroma.sh          # optional NNLS features: needs libboost-dev and
-                                           # pip install --no-build-isolation vamp
-pytest -q                                  # 1,684 tests; NNLS tests skip without the plugin
+pip install -r chordify_backend/requirements.txt pytest httpx mir_eval torch onnx
+bash tools/install_nnls_chroma.sh
+pip install --upgrade setuptools wheel numpy
+pip install --no-build-isolation vamp
+pytest -q
+```
 
+`torch` and `onnx` are only needed for ChordNet training, export and their tests. The NNLS
+plugin (build prerequisites in the [backend README](../../chordify_backend/README.md)) is
+what the shipped model needs; without it the NNLS tests are skipped and the server uses
+the templates. Then start the server and the web app in two terminals and open
+http://localhost:5173:
+
+```bash
 uvicorn chordify_backend.app.main:app --port 8000
-cd chordify-frontend && npm ci && npm run dev   # http://localhost:5173
+```
+
+```bash
+cd chordify-frontend
+npm ci
+npm run dev
 ```
 
 Training and evaluation need the ChoCo checkout from the [README](README.md#reproducing-the-numbers-charts-and-mockup) (`--choco`).

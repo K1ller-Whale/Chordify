@@ -5,10 +5,11 @@ React 19 + TypeScript + Vite. Design and behaviour follow
 
 ```bash
 npm ci
-npm run dev          # http://localhost:5173, expects the API on http://localhost:8000
-npm run build        # typecheck + production build
-npm run lint
+npm run dev
 ```
+
+`npm run dev` serves http://localhost:5173 and expects the API on http://localhost:8000.
+`npm run build` typechecks and builds for production; `npm run lint` runs ESLint.
 
 Set `VITE_API_BASE_URL` (see `.env.example`) when the API runs elsewhere.
 
