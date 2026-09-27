@@ -37,8 +37,14 @@ def evaluate_track(reference: Sequence[Interval], estimate: Sequence[Interval]) 
     import mir_eval
 
     ref_int, ref_lab = _arrays(reference)
-    est_int, est_lab = _arrays(estimate)
-    est_int, est_lab = mir_eval.util.adjust_intervals(est_int, est_lab, ref_int.min(), ref_int.max(),
+    lo, hi = float(ref_int.min()), float(ref_int.max())
+    # Clip to the reference span first: mir_eval would trim a segment that starts where the
+    # reference ends to zero length and then reject it.
+    clipped = [(max(s, lo), min(e, hi), label) for s, e, label in estimate] or [(lo, hi, "N")]
+    est_int, est_lab = _arrays(clipped)
+    if not est_lab:
+        est_int, est_lab = np.array([[lo, hi]]), ["N"]
+    est_int, est_lab = mir_eval.util.adjust_intervals(est_int, est_lab, lo, hi,
                                                       mir_eval.chord.NO_CHORD, mir_eval.chord.NO_CHORD)
     scores = mir_eval.chord.evaluate(ref_int, ref_lab, est_int, est_lab)
     scores["duration"] = float(ref_int.max() - ref_int.min())

@@ -56,3 +56,9 @@ def test_lab_roundtrip_and_cli(tmp_path, capsys):
 def test_overlapping_or_unsorted_intervals_are_sanitised():
     messy = [(1.0, 3.0000001, "C:maj"), (0.0, 1.0, "N"), (3.0, 9.0, "G:7")]
     assert ev.evaluate_track(REF, messy)["root"] > 0
+
+
+def test_estimate_running_past_the_reference_is_clipped():
+    est = REF[:-1] + [(7.0, 9.0, "F:maj/3"), (9.0, 12.0, "N")]  # starts exactly where REF ends
+    assert ev.evaluate_track(REF, est)["mirex"] == pytest.approx(1.0)
+    assert ev.evaluate_track(REF, [(20.0, 30.0, "C:maj")])["majmin"] == pytest.approx(1 / 9)  # only N at 0-1 s
