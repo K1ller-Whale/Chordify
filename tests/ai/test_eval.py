@@ -49,8 +49,10 @@ def test_lab_roundtrip_and_cli(tmp_path, capsys):
     ev.write_lab(REF, tmp_path / "est" / "a.lab")
     assert ev.read_lab(tmp_path / "ref" / "a.lab") == REF
     assert ev.main([str(tmp_path / "ref"), str(tmp_path / "est")]) == 0
-    table = dict(line.split() for line in capsys.readouterr().out.splitlines())
-    assert table["majmin"] == "100.00" and table["seg"] == "100.00"
+    lines = capsys.readouterr().out.splitlines()
+    table = dict(line.split() for line in lines if not line.startswith(" "))
+    assert table["majmin"] == "100.00" and table["seg"] == "100.00" and table["large"] == "100.00"
+    assert any(line.split()[:2] == ["7", "100.0"] for line in lines if line.startswith(" "))
 
 
 def test_overlapping_or_unsorted_intervals_are_sanitised():
@@ -62,3 +64,17 @@ def test_estimate_running_past_the_reference_is_clipped():
     est = REF[:-1] + [(7.0, 9.0, "F:maj/3"), (9.0, 12.0, "N")]  # starts exactly where REF ends
     assert ev.evaluate_track(REF, est)["mirex"] == pytest.approx(1.0)
     assert ev.evaluate_track(REF, [(20.0, 30.0, "C:maj")])["majmin"] == pytest.approx(1 / 9)  # only N at 0-1 s
+
+
+def test_breakdown_by_chord_type_counts_exact_matches_and_confusions():
+    ref = [(0.0, 2.0, "C:maj7"), (2.0, 4.0, "G:7"), (4.0, 6.0, "A:min"), (6.0, 8.0, "B:hdim7")]
+    est = [(0.0, 2.0, "C:maj"), (2.0, 4.0, "G:7"), (4.0, 6.0, "A:min7"), (6.0, 8.0, "C:hdim7")]
+    scores = ev.aggregate([ev.evaluate_track(ref, est)])
+    by = scores["by_quality"]
+    assert by["7"]["recall"] == pytest.approx(1.0)
+    assert by["maj7"]["recall"] == 0 and by["maj7"]["mistaken_for"] == {"maj": 1.0}
+    assert by["min"]["mistaken_for"] == {"min7": 1.0}
+    assert by["hdim7"]["mistaken_for"] == {"wrong root": 1.0}
+    assert by["maj7"]["share"] == pytest.approx(0.25, abs=0.01)
+    assert scores["large"] == pytest.approx(0.25, abs=0.01)
+    assert scores["tetrads"] < scores["majmin"]

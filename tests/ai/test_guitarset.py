@@ -22,7 +22,8 @@ def make_guitarset(root, name="00_Rock1-120-C_comp"):
            "annotations": [{"namespace": "beat_position",
                             "data": [{"time": 0.5 * i, "duration": 0.0, "value": {}} for i in range(16)]},
                            chord(CHORDS),
-                           chord([(s, e, lab.replace(":maj", ":maj7")) for s, e, lab in CHORDS])]}
+                           {**chord([(s, e, lab.replace(":maj", ":maj7")) for s, e, lab in CHORDS]),
+                            "annotation_metadata": {"data_source": "Semi-automatic chord transcription"}}]}
     (root / "annotation" / f"{name}.jams").write_text(json.dumps(jam))
     return root
 
@@ -32,6 +33,8 @@ def test_lead_sheet_chords_are_the_reference(tmp_path):
     ref = guitarset.load_annotation(root / "annotation" / "00_Rock1-120-C_comp.jams")
     assert [lab for _, _, lab in ref["chords"]] == ["C:maj", "G:maj", "A:min", "F:maj"]
     assert ref["beats"][:3] == [0.0, 0.5, 1.0]
+    performed = guitarset.load_annotation(root / "annotation" / "00_Rock1-120-C_comp.jams", "performed")
+    assert [lab for _, _, lab in performed["chords"]] == ["C:maj7", "G:maj7", "A:min", "F:maj7"]
     assert guitarset.style_of("00_Rock1-120-C_comp") == "rock"
     assert guitarset.style_of("03_BN2-131-B_comp") == "bossa nova"
 
