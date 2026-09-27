@@ -74,15 +74,24 @@ const A_SHAPES: Record<string, RelativeShape> = {
   hdim7: [X, 0, 1, 0, 1, X], minmaj7: [X, 0, 2, 1, 1, 0],
 }
 
+function openShape(pc: number, quality: string): Shape | null {
+  for (const [label, shape] of Object.entries(OPEN_SHAPES)) {
+    const [root, q] = label.split(':')
+    if (noteToPc(root) === pc && q === quality) return shape
+  }
+  return null
+}
+
+/** Whether a chord (root pitch class and quality) has an open-position shape. */
+export const hasOpenShape = (pc: number, quality: string) => openShape(pc, quality) !== null
+
 /** A playable guitar shape for a chord, or null if we have none for this quality. */
 export function guitarShape(chord: Pick<ChordSegment, 'label' | 'root' | 'quality'>): Shape | null {
   if (!chord.root || !chord.quality) return null
   const pc = noteToPc(chord.root)
   const quality = chord.quality
-  for (const [label, shape] of Object.entries(OPEN_SHAPES)) {
-    const [root, q] = label.split(':')
-    if (noteToPc(root) === pc && q === quality) return shape
-  }
+  const open = openShape(pc, quality)
+  if (open) return open
   const eFret = (pc - 4 + 12) % 12 || 12
   const aFret = (pc - 9 + 12) % 12 || 12
   const options: [number, RelativeShape | undefined][] = [[eFret, E_SHAPES[quality]], [aFret, A_SHAPES[quality]]]

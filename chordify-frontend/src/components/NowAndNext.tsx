@@ -9,9 +9,11 @@ interface NowProps {
   result: AnalysisResult
   clock: PlaybackClock
   notation: Notation
+  capo?: number
+  sounding?: string // the chord as it sounds, when a capo turns the names into shapes
 }
 
-export function NowPlaying({ chord, result, clock, notation }: NowProps) {
+export function NowPlaying({ chord, result, clock, notation, capo = 0, sounding }: NowProps) {
   const bar = useRef<HTMLDivElement>(null)
   const countdown = useRef<HTMLDivElement>(null)
   const key = result.key.global
@@ -38,6 +40,7 @@ export function NowPlaying({ chord, result, clock, notation }: NowProps) {
       <div className="now">
         <div className="now-meta">
           <div className="now-name">{chordName(chord, notation)}</div>
+          {capo > 0 && !isNoChord(chord) && sounding && <div className="small">Capo {capo} · sounds as {sounding}</div>}
           {isNoChord(chord) ? <div className="fn">No chord</div> : (
             <div className="fn">
               <span className="dot" style={{ background: functionColor(fn) }} />
@@ -52,7 +55,7 @@ export function NowPlaying({ chord, result, clock, notation }: NowProps) {
             <div className="small">Unsure: {chord.alternatives?.slice(0, 2).map((a) => a.display).join(' or ')} also possible</div>
           )}
         </div>
-        {!isNoChord(chord) && <GuitarDiagram shape={guitarShape(chord)} />}
+        {!isNoChord(chord) && <GuitarDiagram shape={guitarShape(chord)} capo={capo} />}
       </div>
     </section>
   )
