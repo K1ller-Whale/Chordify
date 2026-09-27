@@ -140,3 +140,28 @@ def test_display_name_roundtrips_through_parse_display(label):
 def test_parse_display_rejects_unknown_names(bad):
     with pytest.raises(ValueError):
         vocab.parse_display(bad)
+
+
+@pytest.mark.parametrize("label, bass, expected", [
+    ("C:maj", 4, "C:maj/3"), ("C:maj", 7, "C:maj/5"), ("G:7", 5, "G:7/b7"), ("A:min7", 7, "A:min7/b7"),
+    ("B:hdim7", 5, "B:hdim7/b5"), ("C:maj", 0, "C:maj"), ("C:maj", 2, "C:maj"), ("N", 4, "N"),
+])
+def test_with_bass_names_the_inversion(label, bass, expected):
+    assert vocab.with_bass(label, bass) == expected
+
+
+@pytest.mark.parametrize("label, tier, expected", [
+    ("C:maj7/3", "majmin", "C:maj/3"), ("C:maj7/7", "majmin", "C:maj"), ("A:min7/b7", "majmin", "A:min"),
+    ("G:7/b7", "sevenths", "G:7/b7"), ("B:hdim7", "majmin", "X"), ("C:sus4/5", "large", "C:sus4/5"),
+    ("N", "majmin", "N"),
+])
+def test_reduce_keeps_the_bass_only_while_it_is_a_chord_tone(label, tier, expected):
+    assert vocab.reduce_keep_bass(label, vocab.VOCABULARIES[tier]) == expected
+
+
+@pytest.mark.parametrize("label, tier, expected", [
+    ("B:hdim7", "majmin", "B:min"), ("C:sus4", "majmin", "C:maj"), ("C:maj7/3", "majmin", "C:maj/3"),
+    ("G:7", "sevenths", "G:7"), ("F#:dim7", "sevenths", "F#:min"), ("C:aug/3", "majmin", "C:maj/3"), ("N", "majmin", "N"),
+])
+def test_simplify_always_names_a_chord_of_the_coarser_tier(label, tier, expected):
+    assert vocab.simplify(label, vocab.VOCABULARIES[tier]) == expected

@@ -8,7 +8,7 @@ Today Chordify recognises **one chord per clip**. This plan takes it to:
 
 It covers the datasets (including an assessment of the Billboard dataset v1 was trained on), the model architecture, the software architecture and the communication between the web/Android clients, the backend and the models.
 
-> **Status:** phases 0–2 are largely built (core library, ChordNet training stack, v2 API, new web app). The trained chord model, `chordnet-chroma@2.0.0`, is served by default. It names the right chord for **80.5 %** of the time of held-out Billboard songs (templates: 71.4 %) and 76.1 % on real guitar recordings (GuitarSet; templates: 66.5 %). Retraining is documented in [`chordify_ai/TRAINING.md`](../../chordify_ai/TRAINING.md). See [08 · Implementation status](08-implementation-status.md).
+> **Status:** phases 0–2 are largely built (core library, ChordNet training stack, v2 API, new web app). The chord model served by default, `chordnet-chroma@3.0.0`, names 14 chord types on every root (7ths, maj7, m7, 6ths, sus, dim, half-diminished, aug…) plus inversions. On held-out Billboard songs it gets the right major/minor chord **82.3 %** of the time (templates: 71.9 %) and the exact chord, type included, 67.9 %. Retraining is documented in [`chordify_ai/TRAINING.md`](../../chordify_ai/TRAINING.md). See [08 · Implementation status](08-implementation-status.md).
 
 ## Documents
 
@@ -107,7 +107,7 @@ python scripts/make_figures.py
 
 # 3. Mockup data (embedded into mockup/analysis-view.html) and screenshots
 python scripts/make_mockup_data.py --choco /tmp/choco
-NODE_PATH=$(npm root -g) node scripts/screenshot_mockup.js   # needs the playwright package
+NODE_PATH=$(npm root -g) node scripts/screenshot_mockup.js
 ```
 
 ## Glossary

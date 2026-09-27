@@ -285,6 +285,42 @@ def reduce(label: str, vocabulary: Vocabulary = MAJMIN) -> str:
     return UNKNOWN if index is None else vocabulary.decode(index)
 
 
+TIERS = ("majmin", "sevenths", "large")  # each tier's chord types include the previous tier's
+
+
+def with_bass(label: str, bass_pc: int) -> str:
+    """``label`` played over ``bass_pc`` when that note is one of its chord tones other than the
+    root ('C:maj' + E -> 'C:maj/3', 'G:7' + F -> 'G:7/b7'); otherwise ``label`` unchanged."""
+    chord = parse(label)
+    if not chord.is_chord or bass_pc % 12 == chord.root:
+        return label
+    interval = (bass_pc - chord.root) % 12
+    degree = next((d for d in sorted(chord.degrees) if degree_to_semitones(d) % 12 == interval), None)
+    return label if degree is None else f"{label.split('/')[0]}/{degree}"
+
+
+def simplify(label: str, vocabulary: Vocabulary) -> str:
+    """Name ``label`` with the chord types of a coarser vocabulary, for display: like
+    ``reduce_keep_bass``, but a chord the tier cannot represent falls back to its major/minor
+    family by its third ('B:hdim7' -> 'B:min' in majmin, 'C:sus4' -> 'C:maj') instead of X."""
+    simplified = reduce_keep_bass(label, vocabulary)
+    chord = parse(label)
+    if simplified != UNKNOWN or not chord.is_chord:
+        return simplified
+    family = f"{SHARP_NAMES[chord.root]}:{'min' if chord.third == 'min' else 'maj'}"
+    return with_bass(family, chord.bass)
+
+
+def reduce_keep_bass(label: str, vocabulary: Vocabulary) -> str:
+    """Like ``reduce``, but an inversion survives when its bass is still a chord tone of the
+    reduced chord: 'C:maj7/3' -> 'C:maj/3' in majmin, while 'C:maj7/7' -> 'C:maj'."""
+    reduced = reduce(label, vocabulary)
+    chord = parse(label)
+    if reduced in (UNKNOWN, NO_CHORD) or not chord.is_chord or chord.bass == chord.root:
+        return reduced
+    return with_bass(reduced, chord.bass)
+
+
 def _root_text(label: str) -> str:
     end = 1
     while end < len(label) and label[end] in "#b":

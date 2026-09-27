@@ -14,16 +14,29 @@ uvicorn chordify_backend.app.main:app --reload --port 8000
 ```
 
 `ffmpeg` must be on the PATH to decode m4a/aac and webm uploads (the web app records
-WAV, so its recordings do not need it). For Billboard-compatible NNLS chroma features also install `vamp`
-and build the plugin with `tools/install_nnls_chroma.sh`; without it the service
-uses the plugin-free CQT chroma at the same frame rate.
+WAV, so its recordings do not need it). For Billboard-compatible NNLS chroma features, which the shipped
+ChordNet model needs, build the plugin and install its Python host:
+
+```bash
+bash tools/install_nnls_chroma.sh
+pip install --upgrade setuptools wheel numpy
+pip install --no-build-isolation vamp
+python -c "from chordify_core.features import nnls_available; print(nnls_available())"
+```
+
+The build needs a C++ compiler and Boost headers: `apt-get install libboost-dev` on
+Debian/Ubuntu; the Xcode command line tools and `brew install boost` on macOS. The last
+line prints `True` when everything is in place.
+
+Without it the service uses the training-free template model on the plugin-free CQT
+chroma, and `GET /api/v2/models` shows which model is active.
 
 ## Configuration (environment)
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `CHORDIFY_ALLOWED_ORIGINS` | `["http://localhost:5173","http://127.0.0.1:5173"]` | CORS allow-list (JSON list) |
-| `CHORDIFY_CHORD_MODEL` | `auto` | `auto`: the shipped `models/chordnet-chroma/2.0.0` where the NNLS plugin works, else the templates; or `templates`, or a bundle directory |
+| `CHORDIFY_CHORD_MODEL` | `auto` | `auto`: the shipped `models/chordnet-chroma/3.0.0` (every chord type) where the NNLS plugin works, else the templates; or `templates`, or a bundle directory |
 | `CHORDIFY_LM_MODEL` | `models/progression-ngram/1.0.0` | Progression model bundle |
 | `CHORDIFY_MAX_UPLOAD_MB` / `CHORDIFY_MAX_DURATION_S` | `50` / `900` | Upload limits |
 | `CHORDIFY_WORKERS` | `2` | Concurrent analyses |

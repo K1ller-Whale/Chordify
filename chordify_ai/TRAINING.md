@@ -10,12 +10,16 @@ there; if it fails, step 4 shows the one-flag fallback to the CPU.
 
 ## 1. One-time setup (about 10 minutes)
 
-You need `git` and Python 3.11 or 3.12 (on a Mac: `brew install python@3.11`).
+You need `git` and Python 3.11 or 3.12 (on a Mac: `brew install python@3.11`). Use
+`python3.11` by name: on a Mac, plain `python3` is often Xcode's Python 3.9, which can
+train but cannot run the server. After `source .venv/bin/activate`, `python --version`
+should print 3.11 or 3.12. The `git checkout` line is only needed until PR #1 is merged
+into `main`.
 
 ```bash
 git clone https://github.com/K1ller-Whale/Chordify.git
 cd Chordify
-git checkout claude/ecstatic-galileo-cfgdu9      # until PR #1 is merged into main
+git checkout claude/ecstatic-galileo-cfgdu9
 python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r chordify_backend/requirements.txt torch onnx mir_eval
@@ -68,8 +72,9 @@ The template model scores 66.4 % on the same songs.
 
 Reference run (`chordnet-chroma@2.0.0`, MacBook with an M5 Pro, Apple GPU): 42 s per
 epoch, 68.4 % after epoch 1, best 79.5 % at epoch 11, early stop at epoch 17, about
-12 minutes in all. After step 5: 81.4 % on validation; step 6: 80.5 % on test. The same
-run on 3 cloud CPU cores took about 7 minutes per epoch.
+12 minutes in all. After step 5: 81.4 % on validation; step 6: 80.5 % on test (81.8 % and
+81.3 % with the standard scoring the evaluation uses since 3.0.0). The same run on 3 cloud
+CPU cores took about 7 minutes per epoch.
 
 Training runs up to 30 epochs and stops early once 6 epochs pass without improvement.
 Multiply the seconds of your first epoch by about 20 for a rough total. Pressing Ctrl-C
@@ -98,7 +103,7 @@ python -m chordify_ai.eval.evaluate_model \
     --model models/chordnet-chroma/2.0.0 --split test
 ```
 
-Compare `majmin` with the template model on the same 89 test songs: **0.714**. Only ship
+Compare `majmin` with the template model on the same 89 test songs: **0.719**. Only ship
 the new model if it is higher. Do not re-tune after looking at the test score; that would
 make the number meaningless.
 
@@ -111,6 +116,163 @@ git push
 ```
 
 The server picks the bundle up automatically (`CHORDIFY_CHORD_MODEL=auto`) wherever the
-NNLS Chroma plugin is installed (`tools/install_nnls_chroma.sh`, Linux); anywhere else it
-keeps using the template model. Then ask Claude to check it on real guitar recordings
+NNLS Chroma plugin is installed (`tools/install_nnls_chroma.sh`, Linux and macOS); anywhere
+else it keeps using the template model. Then ask Claude to check it on real guitar recordings
 (`chordify_ai.eval.guitarset`) and update the docs and the PR.
+
+# Every chord type: the large-vocabulary model (3.0.0)
+
+Steps 1–7 above train `chordnet-chroma@2.0.0`, which only knows major, minor and "no
+chord": a G7 comes out as G. This part trains the model behind every chord type the app
+can show. It has 14 types on each of the 12 roots, plus "no chord", 169 classes in all:
+
+| Type | Example | Type | Example |
+|---|---|---|---|
+| major, minor | C, Cm | 7, maj7, m7 | C7, Cmaj7, Cm7 |
+| diminished, augmented | Cdim, Caug | dim7, half-diminished | Cdim7, Cm7b5 |
+| 6, m6 | C6, Cm6 | minor-major 7 | Cm(maj7) |
+| sus2, sus4 | Csus2, Csus4 | inversions | C/E, G7/B (from the bass head) |
+
+`chordnet-chroma@3.0.0`, the model the app serves, was trained with exactly the steps below.
+To train a new version, use a new number (say 3.1.0) in every command, so the shipped model
+is not overwritten.
+
+Billboard alone cannot teach this. In its 711 training songs, diminished sevenths, minor-major
+sevenths and augmented chords together make up less than half a percent of the time, and
+2.0.0 gets 0 % of every type except major and minor. The training mixes four sources, each
+with its own share of the training crops:
+
+| Source | What it adds | Share | Licence |
+|---|---|---|---|
+| Billboard (711 songs, 42 h) | Real pop and rock recordings | 45 % | features from McGill |
+| Generated songs (2,000, about 27 h) | Every chord type in balanced amounts, inversions, voicings, bass, drums and melody, rendered with a General MIDI soundfont | 25 % | made by `chordify_ai/data/render.py` |
+| POP909 (728 songs, about 50 h) | Real pop arrangements with rich chords, rendered the same way | 15 % | MIT |
+| GuitarSet (120 takes, 1 h) | Real guitar recordings with jazz, bossa nova and funk chords, labelled with what was actually played | 15 % | CC BY 4.0 |
+
+The loss gives rare types more weight, so the network learns them. The decoder then
+corrects for how rare each type is in real music (Billboard's frequencies). That way the
+model knows an A7 when it hears one, without calling a plain A an A7 just in case.
+
+## 8. Setup for this part (about 10 minutes)
+
+In the `Chordify` folder from step 1, with the virtual environment active:
+
+```bash
+git fetch origin
+git checkout claude/large-vocabulary-chords
+brew install fluid-synth
+pip install torch onnx mir_eval pretty_midi
+bash tools/get_extra_data.sh
+```
+
+The `pip install` line is harmless if some of them are there already. It matters if you made a
+new virtual environment to run the app (say, to move to Python 3.11), because that one has no
+PyTorch yet.
+
+On Linux, use `sudo apt-get install fluidsynth` instead of `brew install fluid-synth`. The
+script downloads GuitarSet (about 700 MB), POP909 (about 150 MB) and the FluidR3_GM
+soundfont (150 MB) into `data/raw/`. It ends with:
+
+```
+==> Done: 180 GuitarSet accompaniment takes (expected 180), 909 POP909 songs (expected 909)
+```
+
+## 9. Check that everything works (about 5 minutes)
+
+```bash
+python -m chordify_ai.train.train_chordnet \
+    --source billboard,guitarset,pop909,generated --vocabulary large \
+    --choco data/raw/choco --chroma data/raw/billboard-features \
+    --guitarset data/raw/guitarset --pop909 data/raw/pop909 \
+    --songs 40 --val-songs 8 --pop909-songs 10 --generated 20 \
+    --epochs 1 --items 64 --out runs/smoke-large
+```
+
+It should print one line per source (`billboard: 40 songs`, `guitarset: 120 songs`,
+`pop909: 10 songs`, `generated: 20 songs`), then `on mps` and one epoch line. The scores
+mean nothing yet.
+
+## 10. Full training (about 35 minutes of training on an M5 Pro, after the first run's rendering)
+
+```bash
+PYTORCH_ENABLE_MPS_FALLBACK=1 caffeinate -i \
+python -m chordify_ai.train.train_chordnet \
+    --source billboard,guitarset,pop909,generated --vocabulary large \
+    --choco data/raw/choco --chroma data/raw/billboard-features \
+    --guitarset data/raw/guitarset --pop909 data/raw/pop909 \
+    --items 4000 --epochs 40 \
+    --out runs/chordnet-large-3.0.0 \
+    --export models/chordnet-chroma/3.0.0 --bundle-id chordnet-chroma@3.0.0 \
+    2>&1 | tee -i runs/train-large.log
+```
+
+The first run renders the POP909 and generated songs to audio and extracts their features,
+using every CPU core but one. On a laptop that takes roughly 15–30 minutes, and
+`data/cache/` keeps the results, so later runs start training right away. Then each epoch
+prints a line like this one:
+
+```
+epoch  22  chord loss 2.421  boundary 0.532  val majmin 77.6  large 59.4  seg 70.0  (71.7 s)
+```
+
+That is the epoch 3.0.0 kept. Its reference run on a MacBook with an M5 Pro took 72 s per
+epoch, reached 67.7 % `val majmin` after epoch 1 and stopped early at epoch 28.
+
+- `val majmin` is scored on Billboard's and GuitarSet's validation songs together, so it is
+  lower than the 79.5 % of step 4, which used Billboard's alone. Compare 3.0.0 with 2.0.0 in
+  steps 12 and 13 instead.
+- `large` is the share of time with exactly the right chord, type included.
+- The best epoch is the one with the best mean of the two. Training stops early after 6
+  epochs without improvement, and Ctrl-C still exports the best epoch so far.
+
+A bigger network may help now that there is 4 times more data. Once the run above works,
+you can try `--d-model 256 --layers 6` with a different `--out`, `--export` and
+`--bundle-id`, and keep whichever scores better in step 11.
+
+## 11. Tune the decoder (10–15 minutes)
+
+```bash
+python -m chordify_ai.eval.tune_decoder \
+    --choco data/raw/choco --chroma data/raw/billboard-features \
+    --model models/chordnet-chroma/3.0.0 --write
+```
+
+For this model it maximises the mean of `majmin` and `large` on Billboard's validation
+songs. It also picks the bass-head confidence at which a slash chord (C/E) is shown.
+
+## 12. Score it on the test songs (once)
+
+```bash
+python -m chordify_ai.eval.evaluate_model \
+    --choco data/raw/choco --chroma data/raw/billboard-features \
+    --model models/chordnet-chroma/3.0.0 --split test
+python -m chordify_ai.eval.guitarset --root data/raw/guitarset \
+    --model models/chordnet-chroma/3.0.0 --split test --labels performed
+```
+
+The first command scores the 89 Billboard test songs, the second the 30 GuitarSet takes of
+player 05, whom training never heard. Each prints the scores from `root` to `tetrads_inv`,
+then one line per chord type with its recall and what it is mistaken for most. The numbers
+to beat:
+
+| Test set | Model | majmin | sevenths | tetrads | large |
+|---|---|---|---|---|---|
+| Billboard test | 2.0.0 (major/minor only) | 81.3 % | 62.4 % | 55.8 % | 59.5 % |
+| Billboard test | **3.0.0, shipped** | **82.3 %** | **71.0 %** | **63.6 %** | **67.9 %** |
+| GuitarSet player 05, as played | 2.0.0 | 78.6 % | 67.0 % | 38.2 % | 42.7 % |
+| GuitarSet player 05, as played | **3.0.0, shipped** | **80.9 %** | **85.9 %** | **52.3 %** | **71.3 %** |
+
+Ship a new model only if it beats the shipped one on Billboard test `majmin` and `large`
+without losing on GuitarSet. As in step 6, do not re-tune after looking at test scores.
+
+## 13. Ship it
+
+```bash
+git add models/chordnet-chroma/3.0.0
+git commit -m "Add ChordNet-Chroma 3.0.0 with every chord type"
+git push origin claude/large-vocabulary-chords
+```
+
+Then tell Claude it is pushed. Claude checks the numbers, makes it the default model,
+updates the docs and gets CI green. Anyone who prefers plain chords can still pick "Major and
+minor" in the app. It uses the same model and simplifies its chords.

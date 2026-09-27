@@ -2,6 +2,9 @@
 
 WCSR (weighted chord symbol recall) = fraction of reference time labelled correctly
 at a comparison level; corpus scores are duration-weighted over tracks, as in MIREX.
+Besides mir_eval's levels, ``large`` is the exact-match rate on the 170-class large
+vocabulary (root and chord type, bass ignored) and ``by_quality`` breaks it down per
+reference chord type, with what each type was mistaken for.
 
     python -m chordify_ai.eval.chords REF_DIR EST_DIR     # directories of .lab files
 """
@@ -10,11 +13,15 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from collections import Counter, defaultdict
 from typing import Iterable, Sequence
 
 import numpy as np
 
-LEVELS = ("root", "majmin", "majmin_inv", "sevenths", "sevenths_inv", "mirex")
+from chordify_core import vocab
+
+LEVELS = ("root", "thirds", "triads", "majmin", "majmin_inv", "sevenths", "sevenths_inv",
+          "tetrads", "tetrads_inv", "mirex")
 SEGMENTATION = ("overseg", "underseg", "seg")
 
 Interval = tuple[float, float, str]
@@ -46,20 +53,98 @@ def evaluate_track(reference: Sequence[Interval], estimate: Sequence[Interval]) 
         est_int, est_lab = np.array([[lo, hi]]), ["N"]
     est_int, est_lab = mir_eval.util.adjust_intervals(est_int, est_lab, lo, hi,
                                                       mir_eval.chord.NO_CHORD, mir_eval.chord.NO_CHORD)
-    scores = mir_eval.chord.evaluate(ref_int, ref_lab, est_int, est_lab)
-    scores["duration"] = float(ref_int.max() - ref_int.min())
-    return {k: float(v) for k, v in scores.items() if k in LEVELS + SEGMENTATION + ("duration",)}
+    out: dict = {"duration": float(ref_int.max() - ref_int.min()), "comparable": {}}
+    # Each level scores only the time it can compare (majmin skips sus4, X is never scored).
+    # Keep that time so aggregate() weights by it, as MIREX's WCSR does.
+    intervals, ref_m, est_m = mir_eval.util.merge_labeled_intervals(ref_int, ref_lab, est_int, est_lab)
+    durations = mir_eval.util.intervals_to_durations(intervals)
+    for level in LEVELS:
+        comparison = np.asarray(getattr(mir_eval.chord, level)(ref_m, est_m), dtype=np.float64)
+        scored = comparison >= 0
+        seconds = float(durations[scored].sum())
+        out[level] = float(durations[scored] @ comparison[scored] / seconds) if seconds > 0 else float("nan")
+        out["comparable"][level] = seconds
+    # as mir_eval.chord.evaluate: repeated chords are merged first (mir_eval >= 0.8)
+    merge = getattr(mir_eval.chord, "merge_chord_intervals", lambda intervals, _: intervals)
+    ref_seg, est_seg = merge(ref_int, ref_lab), merge(est_int, est_lab)
+    out["overseg"] = float(mir_eval.chord.overseg(ref_seg, est_seg))
+    out["underseg"] = float(mir_eval.chord.underseg(ref_seg, est_seg))
+    out["seg"] = min(out["overseg"], out["underseg"])
+    out["qualities"] = quality_breakdown(ref_int, ref_lab, est_int, est_lab)
+    return out
 
 
-def aggregate(per_track: Iterable[dict[str, float]]) -> dict[str, float]:
-    """Duration-weighted means (WCSR), plus the number of tracks."""
+def _large_class(label: str, cache: dict[str, int | None]) -> int | None:
+    if label not in cache:
+        try:
+            cache[label] = vocab.LARGE.encode(label)
+        except ValueError:
+            cache[label] = None
+    return cache[label]
+
+
+def _quality_name(index: int) -> str:
+    return "N" if index == vocab.LARGE.no_chord else vocab.LARGE.quality_of(index)
+
+
+def quality_breakdown(ref_int: np.ndarray, ref_lab: list[str], est_int: np.ndarray,
+                      est_lab: list[str]) -> dict[str, dict[str, float]]:
+    """Seconds of each reference chord type (large vocabulary; X skipped) and how they were
+    labelled: {"maj7": {"maj7": 12.3, "maj": 4.1, ...}}. Exact class match, bass ignored.
+
+    Works on the pieces between consecutive reference and estimate boundaries, over the
+    reference span; where the estimate has a gap, its nearest chord counts."""
+    cache: dict[str, int | None] = {}
+    names: dict[int, str] = {}
+
+    def quality(index: int) -> str:
+        if index not in names:
+            names[index] = _quality_name(index)
+        return names[index]
+
+    edges = np.unique(np.concatenate([ref_int.ravel(), est_int.ravel()]))
+    edges = edges[(edges >= ref_int[0, 0]) & (edges <= ref_int[-1, 1])]
+    mids, lengths = (edges[:-1] + edges[1:]) / 2, np.diff(edges)
+    ref_idx = np.searchsorted(ref_int[:, 0], mids, side="right") - 1
+    est_idx = np.clip(np.searchsorted(est_int[:, 0], mids, side="right") - 1, 0, len(est_lab) - 1)
+    table: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    for i, j, t, length in zip(ref_idx, est_idx, mids, lengths):
+        if i < 0 or t >= ref_int[i, 1]:
+            continue  # a gap in the reference
+        r = _large_class(ref_lab[i], cache)
+        if r is None:
+            continue
+        e = _large_class(est_lab[j], cache)
+        q = quality(r)
+        verdict = q if e == r else ("X" if e is None else ("wrong root" if quality(e) == q else quality(e)))
+        table[q][verdict] += float(length)
+    return {q: dict(v) for q, v in table.items()}
+
+
+def aggregate(per_track: Iterable[dict]) -> dict:
+    """WCSR per level (correct time over the time the level can compare, summed over tracks,
+    so a track with nothing comparable at a level is left out of it), duration-weighted
+    segmentation, the number of tracks, the large-vocabulary exact-match rate and its
+    per-chord-type breakdown (recall, share of the reference time, confusions)."""
     rows = list(per_track)
-    weights = np.array([r["duration"] for r in rows])
-    out = {"tracks": float(len(rows))}
+    out: dict = {"tracks": float(len(rows))}
     for key in LEVELS + SEGMENTATION:
-        values = np.array([r[key] for r in rows])
-        valid = ~np.isnan(values)
+        values = np.array([r[key] for r in rows], dtype=np.float64)
+        weights = np.array([r.get("comparable", {}).get(key, r["duration"]) for r in rows], dtype=np.float64)
+        valid = ~np.isnan(values) & (weights > 0)
         out[key] = float(np.average(values[valid], weights=weights[valid])) if valid.any() else float("nan")
+    totals: dict[str, Counter] = defaultdict(Counter)
+    for row in rows:
+        for q, verdicts in row.get("qualities", {}).items():
+            totals[q].update(verdicts)
+    seconds = {q: sum(v.values()) for q, v in totals.items()}
+    grand = sum(seconds.values())
+    if grand:
+        out["large"] = sum(v[q] for q, v in totals.items()) / grand
+        out["by_quality"] = {
+            q: {"recall": round(totals[q][q] / seconds[q], 4), "share": round(seconds[q] / grand, 4),
+                "mistaken_for": {k: round(s / seconds[q], 3) for k, s in totals[q].most_common(4) if k != q}}
+            for q in sorted(seconds, key=seconds.get, reverse=True)}
     return out
 
 
@@ -76,9 +161,12 @@ def write_lab(segments: Sequence[Interval], path: str | Path) -> None:
     Path(path).write_text("".join(f"{s:.6f}\t{e:.6f}\t{label}\n" for s, e, label in segments))
 
 
-def format_table(scores: dict[str, float]) -> str:
-    keys = [k for k in LEVELS + SEGMENTATION if k in scores]
-    return "\n".join(f"{k:<14}{scores[k] * 100:6.2f}" for k in keys)
+def format_table(scores: dict) -> str:
+    keys = [k for k in LEVELS + ("large",) + SEGMENTATION if k in scores]
+    lines = [f"{k:<14}{scores[k] * 100:6.2f}" for k in keys]
+    for q, row in scores.get("by_quality", {}).items():
+        lines.append(f"  {q:<12}{row['recall'] * 100:6.1f}  ({row['share'] * 100:.1f} % of the time)")
+    return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:

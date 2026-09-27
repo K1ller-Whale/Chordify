@@ -1,4 +1,5 @@
 import type {
+  AnalysisOptions,
   AnalysisResult,
   AnalysisStatus,
   LegacyChordPrediction,
@@ -42,10 +43,12 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 /** Upload with progress (fetch has no upload progress events). */
-export function createAnalysis(file: Blob, filename: string, onProgress?: (fraction: number) => void): Promise<AnalysisStatus> {
+export function createAnalysis(file: Blob, filename: string, onProgress?: (fraction: number) => void,
+                               options?: AnalysisOptions): Promise<AnalysisStatus> {
   return new Promise((resolve, reject) => {
     const form = new FormData()
     form.append('file', file, filename)
+    if (options) form.append('options', JSON.stringify(options))
     const xhr = new XMLHttpRequest()
     xhr.open('POST', `${API_BASE}/api/v2/analyses`)
     xhr.responseType = 'json'

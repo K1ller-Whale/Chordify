@@ -120,3 +120,17 @@ def test_named_loop_is_shown_in_its_canonical_rotation():
     numerals = ["vi", "IV", "I", "V"] * 5  # starts on vi, still the Axis loop
     top = theory.find_patterns(numerals)[0]
     assert top["roman"] == ["I", "V", "vi", "IV"] and top["name"].startswith("I–V–vi–IV")
+
+
+@pytest.mark.parametrize("label, numeral", [
+    ("G:7", "V7"), ("G:maj7", "Vmaj7"), ("A:min7", "vi7"), ("B:hdim7", "viiø7"), ("B:dim7", "vii°7"),
+    ("B:dim", "vii°"), ("F:maj6", "IV6"), ("D:min6", "ii6"), ("A:minmaj7", "vi(maj7)"), ("G:sus4", "Vsus4"),
+    ("D:sus2", "IIsus2"), ("G:aug", "V+"), ("D:7", "V7/V"), ("E:7", "V7/vi"),
+])
+def test_roman_names_every_chord_type_of_the_large_vocabulary(label, numeral):
+    assert theory.roman(label, theory.parse_key("C"), with_quality=True) == numeral
+
+
+def test_describe_gives_the_typed_numeral_and_the_bare_one_for_patterns():
+    info = theory.describe("G:7", theory.parse_key("C"))
+    assert info["roman"] == "V7" and info["roman_triad"] == "V" and info["function"] == "dominant"

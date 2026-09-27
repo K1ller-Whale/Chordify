@@ -15,6 +15,13 @@ export type ProgressionRequest = Schemas['ProgressionRequest']
 export type ProgressionResponse = Schemas['ProgressionResponse']
 export type LegacyChordPrediction = Schemas['LegacyChordPrediction']
 
+/** The ``options`` form field of POST /api/v2/analyses (a JSON string, so not in the OpenAPI types). */
+export interface AnalysisOptions {
+  vocabulary?: 'majmin' | 'sevenths' | 'large'
+  predictions?: boolean
+  min_segment_beats?: number
+}
+
 export type HarmonicFunction = 'tonic' | 'subdominant' | 'dominant' | 'borrowed'
 
 export interface Problem {

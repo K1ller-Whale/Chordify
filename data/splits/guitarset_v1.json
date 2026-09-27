@@ -1,0 +1,7 @@
+{
+ "dataset": "guitarset",
+ "method": "by player: 30 accompaniment takes per player, so every split has all five styles and no guitarist appears in two splits",
+ "train": ["00", "01", "02", "03"],
+ "validation": ["04"],
+ "test": ["05"]
+}

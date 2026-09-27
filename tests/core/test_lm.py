@@ -83,3 +83,18 @@ def test_committed_billboard_model_predicts_common_moves():
     predictions, _ = predict_next(model, ["C:maj", "G:maj", "A:min", "F:maj"] * 2 + ["C:maj", "G:maj"], C)
     assert predictions[0].label == "A:min"
     assert lm.dedupe([1, 1, 2, 2, 1]) == [1, 2, 1]
+
+
+def test_change_matrix_leaves_room_for_chord_type_changes_on_the_same_root():
+    from chordify_core.vocab import LARGE, MAJMIN
+
+    model = NgramProgressionModel.fit([["0:maj", "5:maj", "7:maj", "0:maj"] * 5], order=2, min_count=1)
+    key = C
+    large = model.change_matrix(LARGE, key)
+    c, c7, cmaj7 = LARGE.encode("C:maj"), LARGE.encode("C:7"), LARGE.encode("C:maj7")
+    np.testing.assert_allclose(large.sum(axis=1), 1.0)
+    same = [j for j in range(LARGE.size) if j != c and LARGE.root_of(j) == 0 and lm.token(LARGE.decode(j), key) == "0:maj"]
+    assert large[c, same].sum() == pytest.approx(0.05) and large[c, c7] == pytest.approx(large[c, cmaj7])
+    assert large[c, c] == 0
+    majmin = model.change_matrix(MAJMIN, key)  # no same-token pairs: unchanged behaviour
+    np.testing.assert_allclose(majmin.sum(axis=1), 1.0)

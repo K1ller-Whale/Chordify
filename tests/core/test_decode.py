@@ -146,3 +146,16 @@ def test_beat_grid_continues_through_an_unbeaten_intro_and_fade_out():
     assert np.allclose(bounds[bounds > 6.0][:3], [6.5, 7.0, 7.5])
     gap = decode.unit_boundaries(9.0, np.array([1.0, 1.5, 2.0, 5.0, 5.5]), 21.5)
     assert np.all(np.diff(gap) <= 0.5 + 1e-9)  # a 3 s break between beats is split too
+
+
+def test_inversion_from_the_bass_head():
+    bass = np.zeros(13)
+    bass[4] = 0.7  # E
+    assert decode.inversion("C:maj", bass, 0.5) == "C:maj/3"
+    assert decode.inversion("C:maj", bass, 0.8) == "C:maj"  # not confident enough
+    assert decode.inversion("A:min", bass, 0.5) == "A:min/5"
+    assert decode.inversion("D:maj", bass, 0.5) == "D:maj"  # E is not a D-major chord tone
+    times = np.arange(10) * 0.1
+    post = np.eye(13)[[4] * 5 + [7] * 5]
+    assert np.argmax(decode.mean_over(post, times, 0.0, 0.5)) == 4
+    assert np.argmax(decode.mean_over(post, times, 0.55, 0.58)) == 7  # no frame inside: nearest

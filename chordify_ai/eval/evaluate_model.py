@@ -4,7 +4,7 @@ Works for any chordify_core acoustic model: the training-free templates or an ex
 ChordNet bundle. Each model extracts its *own* FeatureSpec, exactly as in serving.
 
     python -m chordify_ai.eval.evaluate_model --choco CHOCO --model templates --synthetic --songs 25
-    python -m chordify_ai.eval.evaluate_model --choco CHOCO --model models/chordnet-chroma/2.0.0 \\
+    python -m chordify_ai.eval.evaluate_model --choco CHOCO --model models/chordnet-chroma/3.0.0 \\
         --chroma FEATURES --split test        # real Billboard NNLS chroma (McGill archive or Kaggle)
 """
 from __future__ import annotations
@@ -22,13 +22,21 @@ from . import chords as chord_eval
 
 def segments_for(model, raw: np.ndarray, spec: features.FeatureSpec, beats: list[float], duration: float,
                  output: acoustic.AcousticOutput | None = None, **overrides):
-    """Decode as the server does (first pass, no key yet); ``overrides`` replace decoder settings."""
+    """Decode as the server does (first pass, no key yet), with slash basses from the bass
+    head; ``overrides`` replace decoder settings, including ``inversion_threshold``."""
     output = output if output is not None else model.predict(raw)
+    threshold = overrides.pop("inversion_threshold", acoustic.inversion_threshold(model))
     params = acoustic.decoder_kwargs(model) | overrides
     segments = decode.decode(output.chord, spec.frame_rate, beats=np.asarray(beats) if len(beats) > 1 else None,
                              change_prob=output.boundary, prior=getattr(model, "prior", None),
                              frame_offset=spec.offset, duration=duration, **params)
-    return [(s.start, s.end, model.vocabulary.decode(s.index)) for s in segments]
+    labels = [model.vocabulary.decode(s.index) for s in segments]
+    bass = output.extra.get("bass") if threshold is not None else None
+    if bass is not None:
+        times = spec.frame_times(len(output.chord))
+        labels = [decode.inversion(label, decode.mean_over(bass, times, s.start, s.end), threshold)
+                  for label, s in zip(labels, segments)]
+    return [(s.start, s.end, label) for s, label in zip(segments, labels)]
 
 
 def main(argv: list[str] | None = None) -> int:

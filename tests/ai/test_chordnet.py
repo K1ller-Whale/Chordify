@@ -7,11 +7,11 @@ torch = pytest.importorskip("torch")
 
 from chordify_ai.data.billboard import BillboardTrack  # noqa: E402
 from chordify_ai.models.chordnet import ChordNet, ChordNetConfig, count_parameters  # noqa: E402
-from chordify_ai.models.losses import chordnet_loss  # noqa: E402
+from chordify_ai.models.losses import chordnet_loss, quality_class_weights  # noqa: E402
 from chordify_ai.models.targets import IGNORE, frame_targets, transpose_targets  # noqa: E402
 from chordify_ai.train import sources  # noqa: E402
 from chordify_ai.train.dataset import CropDataset, collate, to_tensors, transpose_input  # noqa: E402
-from chordify_ai.train.trainer import TrainConfig, evaluate, train  # noqa: E402
+from chordify_ai.train.trainer import TrainConfig, class_frequencies, decoder_prior, evaluate, train  # noqa: E402
 from chordify_core import acoustic, features  # noqa: E402
 from chordify_core.vocab import MAJMIN, SEVENTHS  # noqa: E402
 
@@ -87,6 +87,31 @@ def test_loss_is_finite_and_differentiable():
     loss.backward()
     assert np.isfinite(loss.item()) and set(parts) >= {"chord", "boundary", "tones"}
     assert batch["chord"][1, -1] == IGNORE and not batch["frame_mask"][1, -1]
+
+
+def test_class_frequencies_follow_the_sampler_and_the_prior_corrects_label_shift():
+    def example(labels):
+        chord = np.array([MAJMIN.encode(label) for label in labels] + [IGNORE])
+        return type("Example", (), {"targets": type("Targets", (), {"chord": chord})()})()
+
+    common, rare = example(["C:maj"] * 9 + ["N"]), example(["D:min"] * 4)
+    freq = class_frequencies([common, rare], MAJMIN, sample_weights=[1, 1])
+    # each song is drawn equally often, so a frame of the short song counts more; ignored frames don't
+    labelled = 9 / 11 + 1 / 11 + 4 / 5
+    assert freq[:12].sum() == pytest.approx(9 / 11 / labelled, rel=1e-4)
+    assert freq[12:24].sum() == pytest.approx(4 / 5 / labelled, rel=1e-4) and np.ptp(freq[12:24]) < 1e-9
+    assert class_frequencies([common, rare], MAJMIN, sample_weights=[3, 1])[24] > freq[24]
+
+    weights = quality_class_weights(torch.from_numpy(freq).float(), 2).numpy()
+    assert weights[12] > weights[0] and weights[-1] == 1  # the rarer type weighs more; N keeps 1
+    assert np.allclose(quality_class_weights(torch.from_numpy(freq).float(), 2, power=0.0).numpy(), 1)
+
+    reference = class_frequencies([common], MAJMIN)  # real music: no minor chords at all
+    prior = decoder_prior(freq, weights, reference)
+    learnt = decoder_prior(freq, weights, None)
+    assert prior.sum() == pytest.approx(1) and learnt.sum() == pytest.approx(1)
+    # dividing by the prior scales minor down against major far more than the learnt prior alone
+    assert prior[12] / prior[0] > 100 * learnt[12] / learnt[0]
 
 
 def test_windowed_inference_stitches_exactly():

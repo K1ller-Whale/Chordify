@@ -5,6 +5,7 @@ import { ChordShare, CircleOfFifths, LeadSheet, ProgressView } from '../componen
 import { NextChord, NowPlaying } from '../components/NowAndNext'
 import { Timeline } from '../components/Timeline'
 import { recallFile, rememberFile, sha256, waveformPeaks } from '../lib/audio'
+import { MAX_CAPO, readCapo, saveCapo, shapeKey, suggestCapo, withCapo } from '../lib/capo'
 import { PlaybackClock, useClock } from '../lib/clock'
 import { chordIndexAt, isNoChord, type Notation } from '../lib/music'
 
@@ -60,13 +61,17 @@ export function AnalysisPage({ id }: { id: string }) {
   return <AnalysisView id={id} result={phase.result} />
 }
 
-function AnalysisView({ id, result }: { id: string; result: AnalysisResult }) {
+function AnalysisView({ id, result: analysed }: { id: string; result: AnalysisResult }) {
   const [clock] = useState(() => {
     const c = new PlaybackClock()
-    c.duration = result.source.duration
+    c.duration = analysed.source.duration
     return c
   })
   const [notation, setNotation] = useState<Notation>('letters')
+  const [capo, setCapo] = useState(() => readCapo(id))
+  // Everything below shows the shapes to play with the capo on; the header keeps the real key.
+  const result = useMemo(() => withCapo(analysed, capo), [analysed, capo])
+  const suggestion = useMemo(() => suggestCapo(analysed.chords), [analysed.chords])
   const [file, setFile] = useState<File | undefined>(() => recallFile(id))
   const [peaks, setPeaks] = useState<number[] | null>(null)
   const [mismatch, setMismatch] = useState(false)
@@ -125,6 +130,11 @@ function AnalysisView({ id, result }: { id: string; result: AnalysisResult }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [clock, starts])
 
+  const changeCapo = (value: number) => {
+    setCapo(value)
+    saveCapo(id, value)
+  }
+
   const attach = async (picked: File | undefined) => {
     if (!picked) return
     setMismatch(!!result.source.sha256 && (await sha256(picked)) !== result.source.sha256)
@@ -132,7 +142,9 @@ function AnalysisView({ id, result }: { id: string; result: AnalysisResult }) {
     setFile(picked)
   }
 
-  const key = result.key.global
+  const key = analysed.key.global
+  const shapes = shapeKey(key, capo)
+  const mode = key.mode === 'unknown' ? '' : ` ${key.mode}`
   return (
     <>
       <header className="song-header">
@@ -147,11 +159,32 @@ function AnalysisView({ id, result }: { id: string; result: AnalysisResult }) {
           <span className="chip"><b>{result.summary.unique_chords}</b> chords</span>
           <a className="chip" href={exportUrl(id, 'lab')} download>Export .lab</a>
         </div>
+        <label className="chip">
+          Capo
+          <select value={capo} onChange={(e) => changeCapo(Number(e.target.value))} aria-label="Capo position">
+            <option value={0}>none</option>
+            {Array.from({ length: MAX_CAPO }, (_, i) => i + 1).map((fret) => (
+              <option key={fret} value={fret}>fret {fret}</option>
+            ))}
+          </select>
+        </label>
         <div className="seg" role="group" aria-label="Chord notation">
           <button aria-pressed={notation === 'letters'} onClick={() => setNotation('letters')}>Letters</button>
           <button aria-pressed={notation === 'roman'} onClick={() => setNotation('roman')}>Roman</button>
         </div>
       </header>
+      {(capo > 0 || suggestion.capo > 0) && (
+        <div className="notice">
+          {capo > 0 && (
+            <span>Capo on fret {capo}: chords are shown as the shapes you play, in <b>{shapes.tonic}{mode}</b>.
+              The song sounds in {key.tonic}{mode}. </span>
+          )}
+          {suggestion.capo > 0 && suggestion.capo !== capo && (
+            <span>With the capo on fret {suggestion.capo}, {Math.round(suggestion.open * 100)}% of the song is open chords.{' '}
+              <button className="linklike link" onClick={() => changeCapo(suggestion.capo)}>Use capo {suggestion.capo}</button></span>
+          )}
+        </div>
+      )}
       {!file && (
         <div className="notice">
           The audio is not stored on the server. <label className="link">Attach the file you analysed
@@ -162,7 +195,8 @@ function AnalysisView({ id, result }: { id: string; result: AnalysisResult }) {
       {mismatch && <div className="notice warn">This file is not the one that was analysed, so chords may not line up.</div>}
       {file && <audio ref={audio} preload="auto" />}
       <div className="grid-top">
-        <NowPlaying chord={chord} result={result} clock={clock} notation={notation} />
+        <NowPlaying chord={chord} result={result} clock={clock} notation={notation} capo={capo}
+                    sounding={analysed.chords[index]?.display} />
         <NextChord chord={chord} actualNext={actualNext} chordsByDisplay={chordsByDisplay} notation={notation} />
       </div>
       <Timeline result={result} clock={clock} current={index} notation={notation} peaks={peaks} surprising={surprising} />

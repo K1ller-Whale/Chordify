@@ -50,36 +50,55 @@ const OPEN_SHAPES: Record<string, Shape> = {
   'C:7': [-1, 3, 2, 3, 1, 0], 'D:7': [-1, -1, 0, 2, 1, 2], 'E:7': [0, 2, 0, 1, 0, 0], 'G:7': [3, 2, 0, 0, 0, 1],
   'A:7': [-1, 0, 2, 0, 2, 0], 'B:7': [-1, 2, 1, 2, 0, 2], 'A:min7': [-1, 0, 2, 0, 1, 0], 'E:min7': [0, 2, 0, 0, 0, 0],
   'D:min7': [-1, -1, 0, 2, 1, 1], 'C:maj7': [-1, 3, 2, 0, 0, 0], 'F:maj7': [-1, -1, 3, 2, 1, 0],
+  'E:maj7': [0, 2, 1, 1, 0, 0], 'D:maj7': [-1, -1, 0, 2, 2, 2], 'G:maj7': [3, 2, 0, 0, 0, 2], 'A:maj7': [-1, 0, 2, 1, 2, 0],
   'A:sus4': [-1, 0, 2, 2, 3, 0], 'D:sus4': [-1, -1, 0, 2, 3, 3], 'E:sus4': [0, 2, 2, 2, 0, 0], 'A:sus2': [-1, 0, 2, 2, 0, 0],
   'D:sus2': [-1, -1, 0, 2, 3, 0],
 }
 
-// Movable barre shapes relative to the root fret: E-shape (root on string 6), A-shape (root on string 5).
-const E_SHAPES: Record<string, Shape> = {
+// Movable shapes relative to the root fret (null = muted; a grip may reach one fret below
+// the root, as in G6 = 3-x-2-4-3-x). E-shapes put the root on string 6, A-shapes on string 5.
+// Every chord type of the large vocabulary has at least one; each was checked to sound
+// exactly its chord tones with the root lowest, at every fret.
+type RelativeShape = (number | null)[]
+const X = null
+const E_SHAPES: Record<string, RelativeShape> = {
   maj: [0, 2, 2, 1, 0, 0], min: [0, 2, 2, 0, 0, 0], '7': [0, 2, 0, 1, 0, 0], min7: [0, 2, 0, 0, 0, 0],
-  maj7: [0, -1, 1, 1, 0, -1], sus4: [0, 2, 2, 2, 0, 0],
+  maj7: [0, X, 1, 1, 0, X], sus4: [0, 2, 2, 2, 0, 0], maj6: [0, X, -1, 1, 0, X], min6: [0, X, -1, 0, 0, X],
+  dim: [0, 1, 2, 0, X, X], aug: [0, X, 2, 1, 1, 0], dim7: [0, X, -1, 0, -1, X], hdim7: [0, X, 0, 0, -1, X],
+  minmaj7: [0, X, 1, 0, 0, X],
 }
-const A_SHAPES: Record<string, Shape> = {
-  maj: [-1, 0, 2, 2, 2, 0], min: [-1, 0, 2, 2, 1, 0], '7': [-1, 0, 2, 0, 2, 0], min7: [-1, 0, 2, 0, 1, 0],
-  maj7: [-1, 0, 2, 1, 2, 0], sus4: [-1, 0, 2, 2, 3, 0], sus2: [-1, 0, 2, 2, 0, 0],
+const A_SHAPES: Record<string, RelativeShape> = {
+  maj: [X, 0, 2, 2, 2, 0], min: [X, 0, 2, 2, 1, 0], '7': [X, 0, 2, 0, 2, 0], min7: [X, 0, 2, 0, 1, 0],
+  maj7: [X, 0, 2, 1, 2, 0], sus4: [X, 0, 2, 2, 3, 0], sus2: [X, 0, 2, 2, 0, 0], maj6: [X, 0, 2, 2, 2, 2],
+  min6: [X, 0, 2, 2, 1, 2], dim: [X, 0, 1, 2, 1, X], aug: [X, 0, 3, 2, 2, 1], dim7: [X, 0, 1, 2, 1, 2],
+  hdim7: [X, 0, 1, 0, 1, X], minmaj7: [X, 0, 2, 1, 1, 0],
 }
+
+function openShape(pc: number, quality: string): Shape | null {
+  for (const [label, shape] of Object.entries(OPEN_SHAPES)) {
+    const [root, q] = label.split(':')
+    if (noteToPc(root) === pc && q === quality) return shape
+  }
+  return null
+}
+
+/** Whether a chord (root pitch class and quality) has an open-position shape. */
+export const hasOpenShape = (pc: number, quality: string) => openShape(pc, quality) !== null
 
 /** A playable guitar shape for a chord, or null if we have none for this quality. */
 export function guitarShape(chord: Pick<ChordSegment, 'label' | 'root' | 'quality'>): Shape | null {
   if (!chord.root || !chord.quality) return null
   const pc = noteToPc(chord.root)
   const quality = chord.quality
-  for (const [label, shape] of Object.entries(OPEN_SHAPES)) {
-    const [root, q] = label.split(':')
-    if (noteToPc(root) === pc && q === quality) return shape
-  }
+  const open = openShape(pc, quality)
+  if (open) return open
   const eFret = (pc - 4 + 12) % 12 || 12
   const aFret = (pc - 9 + 12) % 12 || 12
-  const options: [number, Shape | undefined][] = [[eFret, E_SHAPES[quality]], [aFret, A_SHAPES[quality]]]
-  const usable = options.filter((o): o is [number, Shape] => !!o[1]).sort((a, b) => a[0] - b[0])
+  const options: [number, RelativeShape | undefined][] = [[eFret, E_SHAPES[quality]], [aFret, A_SHAPES[quality]]]
+  const usable = options.filter((o): o is [number, RelativeShape] => !!o[1]).sort((a, b) => a[0] - b[0])
   if (!usable.length) return null
   const [fret, shape] = usable[0]
-  return shape.map((f) => (f < 0 ? -1 : f + fret))
+  return shape.map((f) => (f === null ? -1 : f + fret))
 }
 
 export function formatTime(seconds: number): string {
