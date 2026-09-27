@@ -34,7 +34,7 @@ def transpose_input(x: np.ndarray, semitones: int, input_kind: str) -> np.ndarra
 
 
 class CropDataset(Dataset):
-    """Songs sampled uniformly; each item is a random crop with augmentation.
+    """Songs sampled uniformly (or by ``weights``); each item is a random crop with augmentation.
 
     Augmentation (training only): random transposition (roots balanced by construction,
     replacing v1's undersampling), time-stretch by frame resampling, Gaussian noise.
@@ -42,8 +42,9 @@ class CropDataset(Dataset):
 
     def __init__(self, examples: list[TrackExample], vocabulary: vocab.Vocabulary, crop: int = 512,
                  items_per_epoch: int = 2000, transpose: bool = True, stretch: tuple[float, float] = (0.85, 1.15),
-                 noise: float = 0.02, seed: int = 0):
+                 noise: float = 0.02, seed: int = 0, weights: list[float] | None = None):
         self.examples = examples
+        self.p = None if weights is None else np.asarray(weights, dtype=float) / np.sum(weights)
         self.vocabulary = vocabulary
         self.crop = crop
         self.items_per_epoch = items_per_epoch
@@ -56,7 +57,8 @@ class CropDataset(Dataset):
         return self.items_per_epoch
 
     def __getitem__(self, _: int) -> dict[str, torch.Tensor]:
-        ex = self.examples[self.rng.integers(len(self.examples))]
+        ex = self.examples[int(self.rng.choice(len(self.examples), p=self.p)) if self.p is not None
+                           else int(self.rng.integers(len(self.examples)))]
         x, targets = ex.features, ex.targets
         if self.stretch:
             rate = self.rng.uniform(*self.stretch)

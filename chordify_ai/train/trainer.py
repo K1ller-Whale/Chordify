@@ -37,6 +37,7 @@ class TrainConfig:
     seed: int = 0
     threads: int = 0
     device: str = "auto"  # "auto" (cuda, then Apple's mps, then cpu), "cuda", "mps" or "cpu"
+    select: str = "majmin"  # validation score that picks the best epoch: a level or "a+b" (their mean)
 
     def to_dict(self) -> dict:
         return {**asdict(self), "model": self.model.to_dict()}
@@ -93,8 +94,13 @@ def class_prior(examples, vocabulary: vocab.Vocabulary) -> np.ndarray:
     return prior / prior.sum()
 
 
+def selection_score(scores: dict, select: str) -> float | None:
+    values = [scores.get(level) for level in select.split("+")]
+    return None if any(v is None for v in values) else float(np.mean(values))
+
+
 def train(config: TrainConfig, train_tracks: list[EvalTrack], val_tracks: list[EvalTrack], out_dir: str | Path,
-          log=print) -> dict:
+          log=print, sample_weights: list[float] | None = None) -> dict:
     torch.manual_seed(config.seed)
     if config.threads:
         torch.set_num_threads(config.threads)
@@ -118,7 +124,7 @@ def train(config: TrainConfig, train_tracks: list[EvalTrack], val_tracks: list[E
     prior = class_prior(examples, vocabulary)
 
     dataset = CropDataset(examples, vocabulary, crop=config.crop, items_per_epoch=config.items_per_epoch,
-                          seed=config.seed)
+                          seed=config.seed, weights=sample_weights)
     loader = DataLoader(dataset, batch_size=config.batch_size, collate_fn=collate, num_workers=0)
     optimiser = torch.optim.AdamW(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     total_steps = config.epochs * math.ceil(config.items_per_epoch / config.batch_size)
@@ -137,7 +143,7 @@ def train(config: TrainConfig, train_tracks: list[EvalTrack], val_tracks: list[E
     except KeyboardInterrupt:  # Ctrl-C: keep the best checkpoint so far and export it
         log("stopped by the user; keeping the best checkpoint so far")
         epochs_run = len(history)
-    best_score = max((row["validation"].get("majmin", -1.0) for row in history), default=-1.0)
+    best_score = max((selection_score(row["validation"], config.select) or -1.0 for row in history), default=-1.0)
     (out / "history.json").write_text(json.dumps(history, indent=1))
     return {"best_score": best_score, "history": history, "checkpoint": str(out / "best.pt"), "prior": prior,
             "epochs": epochs_run}
@@ -171,9 +177,11 @@ def _run_epochs(config, model, ema, loader, optimiser, scheduler, weights, val_t
         mean = {k: float(np.mean([p[k] for p in losses])) for k in losses[0]}
         row = {"epoch": epoch + 1, "seconds": round(time.time() - started, 1), "loss": mean, "validation": scores}
         history.append(row)
-        score = scores.get("majmin", -mean["chord"])
+        selected = selection_score(scores, config.select)
+        score = -mean["chord"] if selected is None else selected
+        extra = f"  large {scores['large'] * 100:.1f}" if "large" in scores and config.vocabulary != "majmin" else ""
         log(f"epoch {epoch + 1:3d}  chord loss {mean['chord']:.3f}  boundary {mean['boundary']:.3f}  "
-            f"val majmin {scores.get('majmin', float('nan')) * 100:.1f}  seg {scores.get('seg', float('nan')) * 100:.1f}"
+            f"val majmin {scores.get('majmin', float('nan')) * 100:.1f}{extra}  seg {scores.get('seg', float('nan')) * 100:.1f}"
             f"  ({row['seconds']} s)")
         (out / "history.json").write_text(json.dumps(history, indent=1))
         if score > best_score:
