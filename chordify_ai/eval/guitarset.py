@@ -44,6 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", default="templates", help="'templates' or a ChordNet bundle directory")
     parser.add_argument("--mode", default="comp", choices=["comp", "solo"])
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--decoder", type=json.loads, default={}, help='override decoder settings, e.g. \'{"subdivide": 2}\'')
     args = parser.parse_args(argv)
 
     model = acoustic.load_acoustic_model(args.model)
@@ -61,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
         raw = features.extract(spec, y, sr)
         duration = len(y) / sr
         beats = [b for b in ref["beats"] if b < duration]
-        row = chord_eval.evaluate_track(ref["chords"], segments_for(model, raw, spec, beats, duration))
+        row = chord_eval.evaluate_track(ref["chords"], segments_for(model, raw, spec, beats, duration, **args.decoder))
         rows.append(row)
         by_style[style_of(path.stem)].append(row)
     report = {"model": model.id, "features": spec.kind, "dataset": f"guitarset-{args.mode}-mic",

@@ -43,6 +43,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--songs", type=int, default=0)
     parser.add_argument("--max-seconds", type=float, default=90.0)
     parser.add_argument("--seed", type=int, default=2)
+    parser.add_argument("--decoder", type=json.loads, default={}, help='override decoder settings, e.g. \'{"subdivide": 2}\'')
     args = parser.parse_args(argv)
     if not args.synthetic and not args.chroma:
         parser.error("choose --synthetic or --chroma")
@@ -69,7 +70,7 @@ def main(argv: list[str] | None = None) -> int:
             _, raw = features.load_billboard_bothchroma(path)
             chords, duration = track.chords, track.duration
         beats = [b for b in track.beats if b < duration]
-        rows.append(chord_eval.evaluate_track(chords, segments_for(model, raw, spec, beats, duration)))
+        rows.append(chord_eval.evaluate_track(chords, segments_for(model, raw, spec, beats, duration, **args.decoder)))
     scores = chord_eval.aggregate(rows)
     print(json.dumps({"model": model.id, "features": spec.kind, "split": args.split,
                       "source": "synthetic" if args.synthetic else "billboard-nnls", **scores}, indent=1))
