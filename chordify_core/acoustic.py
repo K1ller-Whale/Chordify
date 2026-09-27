@@ -113,9 +113,10 @@ class TemplateChordModel:
     N wins on low-energy frames. Temperature-scaled into posteriors for the decoder.
     """
 
-    id = "chroma-templates@0.1.0"
+    id = "chroma-templates@0.2.0"
     vocabulary = vocab.MAJMIN
-    decoder_params = {"alpha": 0.0, "self_prob": 0.8, "subdivide": 1, "min_units": 1}
+    # Tuned on the Billboard validation split (chordify_ai.eval.tune_decoder); half-beat units.
+    decoder_params = {"alpha": 0.0, "self_prob": 0.85, "subdivide": 2, "min_units": 1}
     prior = None
 
     def __init__(self, feature_spec: FeatureSpec | None = None, temperature: float = 0.08, bass_weight: float = 0.25):

@@ -23,7 +23,7 @@ def loop_analysis(client):
 def test_health_and_models(client):
     assert client.get("/healthz").json() == {"status": "ok"}
     info = client.get("/api/v2/models").json()
-    assert info["models"]["chord"] == "chroma-templates@0.1.0"
+    assert info["models"]["chord"] == "chroma-templates@0.2.0"
     assert info["models"]["lm"] == "progression-ngram@1.0.0"
     assert info["features"]["frame_rate"] == pytest.approx(44100 / 2048)
 
@@ -34,8 +34,10 @@ def test_result_follows_the_schema_and_finds_the_chords(loop_analysis):
     assert result["analysis_id"] == analysis_id
     chords = [c for c in result["chords"] if c["label"] != "N"]
     assert [c["display"] for c in chords] == ["C", "G", "Am", "F"] * 4
+    # The templates decode in half-beat units (0.25 s at 120 BPM), and the long NNLS
+    # window hears the next chord's attack early, so a change may land one unit early.
     for chord, expected_start in zip(chords, range(0, 32, 2)):
-        assert chord["start"] == pytest.approx(expected_start, abs=0.15)
+        assert chord["start"] == pytest.approx(expected_start, abs=0.26)
     assert [c["roman"] for c in chords[:4]] == ["I", "V", "vi", "IV"]
     assert [c["function"] for c in chords[:4]] == ["tonic", "dominant", "tonic", "subdominant"]
     assert result["key"]["global"]["tonic"] == "C" and result["key"]["global"]["mode"] == "major"

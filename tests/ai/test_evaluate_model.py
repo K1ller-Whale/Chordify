@@ -18,7 +18,7 @@ def test_templates_score_a_synthetic_render_through_the_production_decoder(tmp_p
 
     assert evaluate_model.main(["--choco", str(root), "--split-file", str(split_file), "--synthetic"]) == 0
     report = json.loads(capsys.readouterr().out)
-    assert report["model"] == "chroma-templates@0.1.0" and report["source"] == "synthetic"
+    assert report["model"] == "chroma-templates@0.2.0" and report["source"] == "synthetic"
     assert report["tracks"] == 1
     assert report["majmin"] > 0.7
 
