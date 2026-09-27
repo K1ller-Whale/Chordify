@@ -145,6 +145,24 @@ def test_load_audio_resamples_wav_bytes():
     assert abs(len(out) - 22050) <= 2 and out.dtype == np.float32
 
 
+@pytest.mark.skipif(audio.ffmpeg_binary() is None, reason="needs ffmpeg")
+def test_m4a_with_its_index_at_the_end_decodes_from_an_upload(tmp_path):
+    """ffmpeg writes the moov atom after the audio by default, as most M4A files have it;
+    reading such a file through a pipe fails ("partial file"), so uploads must not be piped."""
+    import subprocess
+
+    import soundfile as sf
+
+    y, _ = synth.render_progression([("C:maj", 5.0), ("G:maj", 5.0)], sr=44100)
+    sf.write(tmp_path / "song.wav", y, 44100)
+    subprocess.run([audio.ffmpeg_binary(), "-nostdin", "-loglevel", "error", "-i", str(tmp_path / "song.wav"),
+                    "-c:a", "aac", "-b:a", "128k", str(tmp_path / "song.m4a")], check=True)
+    data = (tmp_path / "song.m4a").read_bytes()
+    assert data.find(b"moov") > data.find(b"mdat")  # index after the audio
+    out = audio.load_audio(data, 22050, filename="song.m4a")
+    assert abs(len(out) / 22050 - 10.0) < 0.1 and np.abs(out).max() > 0.01
+
+
 @nnls
 def test_nnls_frame_times_match_the_audio():
     """Vamp stamps NNLS frames at block centres (frame 0 = 0.186 s); spec.frame_times must agree,

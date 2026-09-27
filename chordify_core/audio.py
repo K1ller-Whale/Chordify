@@ -5,6 +5,7 @@ import io
 import os
 import shutil
 import subprocess
+import tempfile
 
 import numpy as np
 
@@ -20,14 +21,28 @@ def ffmpeg_binary() -> str | None:
     return os.environ.get("CHORDIFY_FFMPEG") or shutil.which("ffmpeg")
 
 
-def _decode_ffmpeg(data: bytes, sr: int) -> np.ndarray:
+def _decode_ffmpeg(source: bytes | str | os.PathLike, sr: int, suffix: str = "") -> np.ndarray:
+    """Decode with ffmpeg from a real file, never a pipe: MP4/M4A files usually keep their
+    index (the moov atom) at the end, which ffmpeg cannot seek to in a pipe."""
     binary = ffmpeg_binary()
     if binary is None:
         raise AudioDecodeError("ffmpeg is required to decode this format but was not found")
+    if not isinstance(source, bytes):
+        return _run_ffmpeg(binary, os.fspath(source), sr)
+    handle, path = tempfile.mkstemp(suffix=suffix)
+    try:
+        with os.fdopen(handle, "wb") as out:
+            out.write(source)
+        return _run_ffmpeg(binary, path, sr)
+    finally:
+        os.unlink(path)
+
+
+def _run_ffmpeg(binary: str, path: str, sr: int) -> np.ndarray:
     proc = subprocess.run(
-        [binary, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
+        [binary, "-nostdin", "-hide_banner", "-loglevel", "error", "-i", path,
          "-f", "f32le", "-acodec", "pcm_f32le", "-ac", "1", "-ar", str(sr), "pipe:1"],
-        input=data, capture_output=True, timeout=120, check=False,
+        capture_output=True, timeout=120, check=False,
     )
     if proc.returncode != 0 or not proc.stdout:
         raise AudioDecodeError(proc.stderr.decode(errors="replace").strip() or "ffmpeg could not decode the file")
@@ -62,7 +77,4 @@ def load_audio(source: str | os.PathLike | bytes, sr: int, filename: str | None 
         except Exception as err:  # fall through to ffmpeg for mislabelled files
             if ffmpeg_binary() is None:
                 raise AudioDecodeError(str(err)) from err
-    if data is None:
-        with open(source, "rb") as handle:
-            data = handle.read()
-    return _decode_ffmpeg(data, sr)
+    return _decode_ffmpeg(data if data is not None else source, sr, suffix=os.path.splitext(name)[1])
