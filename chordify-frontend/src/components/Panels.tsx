@@ -18,7 +18,9 @@ export function CircleOfFifths({ result, current }: { result: AnalysisResult; cu
   const real = useMemo(() => result.chords.filter((c) => !isNoChord(c)), [result.chords])
   const nodes = useMemo(() => {
     const share = new Map(result.summary.time_share.map((s) => [s.display, s.share]))
-    const map = new Map<string, { chord: ChordSegment; share: number; xy: [number, number]; label: string }>()
+    // label: the circle's fixed name for that position (hides the grey background name);
+    // text: the chord as this song spells it (Gb in Db major, not F#)
+    const map = new Map<string, { chord: ChordSegment; share: number; xy: [number, number]; label: string; text: string }>()
     for (const chord of real) {
       const key = nodeKey(chord)
       if (!key || map.has(key)) continue
@@ -26,7 +28,7 @@ export function CircleOfFifths({ result, current }: { result: AnalysisResult; cu
       const pc = Number(key.split(':')[0])
       const index = circleIndex(pc, minor)
       map.set(key, { chord, share: share.get(chord.display) ?? 0, xy: position(index, minor ? RI : RO),
-                     label: minor ? MINOR_CIRCLE[index] : MAJOR_CIRCLE[index] })
+                     label: minor ? MINOR_CIRCLE[index] : MAJOR_CIRCLE[index], text: `${chord.root}${minor ? 'm' : ''}` })
     }
     return map
   }, [real, result.summary.time_share])
@@ -82,7 +84,7 @@ export function CircleOfFifths({ result, current }: { result: AnalysisResult; cu
             <g key={n.label}>
               {n === currentNode && <circle cx={n.xy[0]} cy={n.xy[1]} r={r + 4} fill="none" stroke="var(--ink)" strokeWidth={2} />}
               <circle cx={n.xy[0]} cy={n.xy[1]} r={r} fill={functionColor(n.chord.function)} stroke="var(--surface)" strokeWidth={2} />
-              <text x={n.xy[0]} y={n.xy[1] + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff">{n.label}</text>
+              <text x={n.xy[0]} y={n.xy[1] + 4} textAnchor="middle" fontSize={11} fontWeight={700} fill="#fff">{n.text}</text>
             </g>
           )
         })}
