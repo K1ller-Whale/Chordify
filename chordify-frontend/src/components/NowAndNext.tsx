@@ -67,7 +67,8 @@ interface NextProps {
 
 export function NextChord({ chord, actualNext, chordsByDisplay, notation }: NextProps) {
   const predictions = chord.next ?? []
-  const rank = actualNext ? predictions.findIndex((p) => p.roman === actualNext.roman) : -1
+  // predictions are bare numerals (V), chords carry their type (V7): compare like with like
+  const rank = actualNext ? predictions.findIndex((p) => p.roman === (actualNext.roman_triad ?? actualNext.roman)) : -1
   return (
     <section className="card">
       <h2>What comes next</h2>

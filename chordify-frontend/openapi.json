@@ -968,7 +968,20 @@
         "type": "null"
        }
       ],
-      "title": "Roman"
+      "title": "Roman",
+      "description": "Roman numeral with the chord type: V7, IVmaj7, vii\u00f87"
+     },
+     "roman_triad": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Roman Triad",
+      "description": "Bare numeral (V for V7), as predictions and patterns use"
      },
      "function": {
       "anyOf": [

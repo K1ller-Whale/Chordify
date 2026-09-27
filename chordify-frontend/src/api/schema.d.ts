@@ -379,8 +379,16 @@ export interface components {
             quality?: string | null;
             /** Bass */
             bass?: string | null;
-            /** Roman */
+            /**
+             * Roman
+             * @description Roman numeral with the chord type: V7, IVmaj7, viiø7
+             */
             roman?: string | null;
+            /**
+             * Roman Triad
+             * @description Bare numeral (V for V7), as predictions and patterns use
+             */
+            roman_triad?: string | null;
             /** Function */
             function?: string | null;
             /** Scale Hint */
