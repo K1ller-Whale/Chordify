@@ -1,6 +1,6 @@
-# The engine's native library, libchordify_engine.so: NNLS Chroma run by a minimal Vamp host.
-# The third-party code is unmodified upstream source at the versions the Python reference uses
-# (third_party/README.md); flags follow how that reference is built.
+# The engine's native library, libchordify_engine.so: NNLS Chroma run by a minimal Vamp host,
+# and libsoxr. The third-party code is unmodified upstream source at the versions the Python
+# reference uses (third_party/README.md); flags follow how that reference is built.
 cmake_minimum_required(VERSION 3.22.1)
 project(chordify_engine C CXX)
 
@@ -13,6 +13,15 @@ set(THIRD_PARTY ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 # would otherwise contract a*b+c and round differently. -O3 even in debug builds, so the
 # instrumented tests and the benchmark run the code that ships.
 set(PARITY_FLAGS -O3 -ffp-contract=off)
+
+# libsoxr, configured as python-soxr 1.1.0's CMakeLists.txt configures it.
+set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(WITH_OPENMP OFF CACHE BOOL "" FORCE)
+set(WITH_LSR_BINDINGS OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+add_subdirectory(${THIRD_PARTY}/libsoxr ${CMAKE_CURRENT_BINARY_DIR}/libsoxr EXCLUDE_FROM_ALL)
+target_compile_options(soxr PRIVATE ${PARITY_FLAGS} -w)
 
 # The host side of Vamp plugin SDK 2.6, as the Python vamp 1.1.0 package bundles it: the
 # input-domain adapter (Hann window, built-in FFT) that turns audio into NNLS Chroma's input.
@@ -38,6 +47,7 @@ target_include_directories(nnls_chroma PRIVATE ${NNLS} ${VAMP_SDK})
 target_compile_definitions(nnls_chroma PRIVATE _VAMP_PLUGIN_IN_HOST_NAMESPACE)
 target_compile_options(nnls_chroma PRIVATE ${PARITY_FLAGS} -ftree-vectorize -ffast-math -ffp-contract=off -w)
 
-add_library(chordify_engine SHARED nnls_host.cpp nnls_jni.cpp)
+add_library(chordify_engine SHARED nnls_host.cpp nnls_jni.cpp soxr_jni.cpp)
+target_include_directories(chordify_engine PRIVATE ${THIRD_PARTY}/libsoxr/src)
 target_compile_options(chordify_engine PRIVATE ${PARITY_FLAGS} -Wall)
-target_link_libraries(chordify_engine PRIVATE nnls_chroma vamp_hostsdk log)
+target_link_libraries(chordify_engine PRIVATE nnls_chroma vamp_hostsdk soxr log)
