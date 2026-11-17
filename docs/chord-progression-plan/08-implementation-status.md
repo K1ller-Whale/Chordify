@@ -196,6 +196,17 @@ Full analysis of a 296 s synthetic song on a 4-vCPU container, warm, two runs ea
 
 The phase 1 budget is p95 ≤ 20 s for a 4-minute song. Switching features from CQT to NNLS costs about 2 s. ChordNet with half-beat decoding units costs 1–3 s more than the templates. The 169-class decoder costs no measurable time over the 25-class one.
 
+On the phone the Android engine computes the same NNLS features (`Mobile/engine`, milestone M2 of the
+[mobile design](../superpowers/specs/2026-11-17-mobile-on-device-design.md)). Decoding and NNLS Chroma
+alone, for a 240 s song, from `FeatureBenchmarkDeviceTest`:
+
+| Device | ABI | Decode + NNLS features |
+|---|---|---|
+| Emulator (API 34, Google APIs, 2 cores) on an Intel Core i7-9750H laptop | x86_64 | 26.7–37.4 s (two runs) |
+| No phone measured yet | arm64-v8a | |
+
+A separate emulator run timed each step (41.7 s in all): decoding the WAV 10.2 s, framing and FFT 22.3 s, the NNLS solve 9.2 s. The NNLS steps run about ten times slower there than on the server, so only a phone can tell whether the 20 s budget holds. Decoding a plain WAV taking 10–11 s is the engine's own overhead, not the codec's: cutting the decoding loop's `MediaCodec` waits from 10 ms to 1 ms changed nothing. The tests run as a debuggable build, so it is to be profiled on a phone before being optimised.
+
 ## 4. Where the build differs from the plan
 
 | Plan | Built | Why | Revisit when |
