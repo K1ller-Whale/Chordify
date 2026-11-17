@@ -15,6 +15,12 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+    sourceSets {
+        // Golden-file helpers serve both test kinds; the device tests read the same golden files.
+        test {
+            java.srcDirs += 'src/sharedTest/kotlin'
+        }
+    }
 }
 
 kotlin {
