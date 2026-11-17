@@ -18,13 +18,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip setuptools wheel numpy
-          pip install -r chordify_backend/requirements.txt pytest httpx mir_eval
+          pip install -r chordify_backend/requirements.txt pytest httpx mir_eval soxr==1.1.0
           pip install torch --index-url https://download.pytorch.org/whl/cpu
           pip install onnx pretty_midi
       - name: Build the NNLS Chroma plugin, install FluidSynth and ffmpeg
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q libboost-dev fluidsynth fluid-soundfont-gm ffmpeg
-          pip install --no-build-isolation vamp
+          pip install --no-build-isolation vamp==1.1.0
           bash tools/install_nnls_chroma.sh
           python -c "from chordify_core.features import nnls_available; assert nnls_available()"
       - name: Test

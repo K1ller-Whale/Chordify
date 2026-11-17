@@ -25,8 +25,15 @@ fi
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-git clone -q --depth 1 https://github.com/vamp-plugins/vamp-plugin-sdk.git "$WORK/vamp-plugin-sdk"
-git clone -q --depth 1 https://github.com/c4dm/nnls-chroma.git "$WORK/nnls-chroma"
+# Pinned, so the server, CI, the golden-file container (tools/mobile_goldens.Dockerfile) and the
+# Android engine (Mobile/engine/src/main/cpp/third_party) all compute the same features.
+VAMP_SDK_COMMIT=44c2487763eb248a933e9eff9169cfadee375009
+NNLS_CHROMA_COMMIT=4c5f214a75cb354f8d8c933e161377c5b4d83713
+fetch() {  # fetch <repository> <commit> <directory>
+  git init -q "$3" && git -C "$3" fetch -q --depth 1 "$1" "$2" && git -C "$3" checkout -q FETCH_HEAD
+}
+fetch https://github.com/vamp-plugins/vamp-plugin-sdk.git "$VAMP_SDK_COMMIT" "$WORK/vamp-plugin-sdk"
+fetch https://github.com/c4dm/nnls-chroma.git "$NNLS_CHROMA_COMMIT" "$WORK/nnls-chroma"
 
 if [ "$OS" = "Darwin" ]; then
   BOOST_INCLUDE="$(brew --prefix boost 2>/dev/null)/include"

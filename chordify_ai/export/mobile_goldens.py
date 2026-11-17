@@ -2,16 +2,22 @@
 
     python -m chordify_ai.export.mobile_goldens                 # every file
     python -m chordify_ai.export.mobile_goldens --only vocab    # one file
+    tools/mobile_goldens.sh                                     # features.json.gz (needs Docker)
 
-Each file holds inputs and what chordify_core returns for them. The engine's JVM tests
-(Mobile/engine/src/test) replay the inputs through the Kotlin port and compare, and
-tests/ai/test_mobile_goldens.py fails when chordify_core changes and the files are stale.
-Inputs are deterministic and never come from numpy's random generators, whose streams may
-change between numpy releases.
+Each file holds inputs and what chordify_core returns for them. The engine's tests
+(Mobile/engine/src/test and src/androidTest) replay the inputs through the Kotlin port and
+compare, and tests/ai/test_mobile_goldens.py fails when chordify_core changes and the files
+are stale. Inputs are deterministic and never come from numpy's random generators, whose
+streams may change between numpy releases. The one exception, the rendered audio in
+goldens/audio, is committed and only re-rendered on purpose (--render-audio).
+
+features.json.gz needs the NNLS Chroma Vamp plugin, which tools/mobile_goldens.sh provides in
+a Linux container. Where the plugin is not installed, that file is skipped.
 """
 from __future__ import annotations
 
 import argparse
+import gzip
 import json
 from pathlib import Path
 
@@ -371,20 +377,172 @@ def decode_golden() -> dict:
     }
 
 
-FILES = {"vocab": vocab_golden, "theory": theory_golden, "lm": lm_golden, "decode": decode_golden}
+# ---------------------------------------------------------------------------
+# features: decoding, resampling and NNLS Chroma (needs the Vamp plugin)
+# ---------------------------------------------------------------------------
+
+AUDIO_DIR = DEFAULT_OUT / "audio"
+LOOP = [("C:maj", 2.0), ("G:maj", 2.0), ("A:min", 2.0), ("F:maj", 2.0)]
+SEVENTHS = [("C:maj7", 2.0), ("A:min7", 2.0), ("D:min7", 2.0), ("G:7", 2.0)]
+# 16-bit WAV inputs, which every decoder reads exactly. Each one exercises one more step:
+# plain 44.1 kHz; digital silence at both ends; resampling down; stereo and resampling up.
+WAV_INPUTS = ["loop.wav", "loop_padded.wav", "loop_48k.wav", "sevenths_stereo_22k.wav"]
+# Lossy copies of loop.wav. Decoders differ, so only their timing is compared (spec §7.1).
+ENCODED_INPUTS = {"loop.mp3": ["-codec:a", "libmp3lame", "-b:a", "128k"],
+                  "loop.m4a": ["-codec:a", "aac", "-b:a", "128k"]}
+SLICE_START_S = 1.0
+DECODED_SLICE = 1024
+RESAMPLED_SLICE = 2048
+
+
+def envelope_offset_ms(reference: np.ndarray, other: np.ndarray, sr: int) -> float:
+    """How late ``other`` is against ``reference``, in ms: the lag (within ±200 ms) that best
+    lines up their 5 ms RMS envelopes. The engine's EncodedAudioDeviceTest computes the same."""
+    hop = int(round(sr * 0.005))
+
+    def envelope(y: np.ndarray) -> np.ndarray:
+        n = len(y) // hop
+        e = np.sqrt((y[:n * hop].astype(np.float64).reshape(n, hop) ** 2).mean(axis=1))
+        return e - e.mean()
+
+    a, b = envelope(reference), envelope(other)
+    best, best_score = 0, -np.inf
+    for lag in range(-40, 41):
+        x, y = (a, b[lag:]) if lag >= 0 else (a[-lag:], b)
+        m = min(len(x), len(y))
+        score = float(np.dot(x[:m], y[:m]))
+        if score > best_score:
+            best, best_score = lag, score
+    return best * hop / sr * 1000
+
+
+def render_audio(audio_dir: Path = AUDIO_DIR) -> None:
+    """Write the audio inputs. They are committed and only re-rendered on purpose
+    (--render-audio): the synthesiser's noise comes from numpy's random generator."""
+    import subprocess
+
+    import soundfile as sf
+
+    from chordify_core import audio, synth
+
+    audio_dir.mkdir(parents=True, exist_ok=True)
+    loop, _ = synth.render_progression(LOOP, sr=44100)
+    sf.write(audio_dir / "loop.wav", loop, 44100, subtype="PCM_16")
+    silence = np.zeros(int(1.5 * 44100), dtype=np.float32)
+    sf.write(audio_dir / "loop_padded.wav", np.concatenate([silence, loop, silence]), 44100, subtype="PCM_16")
+    loop48, _ = synth.render_progression(LOOP, sr=48000)
+    sf.write(audio_dir / "loop_48k.wav", loop48, 48000, subtype="PCM_16")
+    left, _ = synth.render_progression(SEVENTHS, sr=22050, seed=1)
+    right, _ = synth.render_progression(SEVENTHS, sr=22050, seed=2)
+    sf.write(audio_dir / "sevenths_stereo_22k.wav", np.stack([left, 0.6 * right], axis=1), 22050, subtype="PCM_16")
+    for name, codec in ENCODED_INPUTS.items():
+        subprocess.run([audio.ffmpeg_binary(), "-nostdin", "-loglevel", "error", "-y", "-i",
+                        str(audio_dir / "loop.wav"), *codec, "-map_metadata", "-1", "-fflags", "+bitexact",
+                        "-flags:a", "+bitexact", str(audio_dir / name)], check=True)
+
+
+def _f32(values) -> list[float]:
+    """float32 values as the shortest decimals that read back as the same float32."""
+    return [float(f"{v:.9g}") for v in np.asarray(values, dtype=np.float32).ravel().tolist()]
+
+
+def _f32_rows(matrix) -> list[list[float]]:
+    return [_f32(row) for row in np.asarray(matrix, dtype=np.float32)]
+
+
+def _environment() -> dict:
+    """Versions that shape the features; recorded, not compared."""
+    from importlib import metadata
+
+    import soundfile as sf
+
+    versions = {name: metadata.version(name) for name in ("numpy", "librosa", "soxr", "soundfile", "vamp")}
+    return versions | {"libsndfile": sf.__libsndfile_version__}
+
+
+def features_golden() -> dict:
+    import soundfile as sf
+    import vamp
+
+    from chordify_core import audio, features
+
+    if not features.nnls_available():
+        raise SystemExit("features.json.gz needs the NNLS Chroma Vamp plugin: run tools/mobile_goldens.sh")
+    spec = features.NNLS_BOTHCHROMA
+    inputs = []
+    for name in WAV_INPUTS:
+        path = AUDIO_DIR / name
+        native, sr = sf.read(str(path), dtype="float32", always_2d=False)
+        mono = audio.to_mono(native)
+        y44 = audio.load_audio(path.read_bytes(), spec.sample_rate, filename=name)  # the server's decode
+        raw = features.nnls_bothchroma(y44, spec.sample_rate)
+        start = int(SLICE_START_S * sr)
+        row = {"file": name, "sample_rate": sr, "channels": 1 if native.ndim == 1 else native.shape[1],
+               "frames": len(native), "decoded": {"start": start, "values": _f32(mono[start:start + DECODED_SLICE])},
+               "samples": len(y44), "raw": _f32_rows(raw), "normalised": _f32_rows(features.normalise_bothchroma(raw))}
+        if sr != spec.sample_rate:
+            start = int(SLICE_START_S * spec.sample_rate)
+            row["resampled"] = {"start": start, "values": _f32(y44[start:start + RESAMPLED_SLICE])}
+        inputs.append(row)
+
+    loop = audio.load_audio((AUDIO_DIR / "loop.wav").read_bytes(), spec.sample_rate, filename="loop.wav")
+    for name in ENCODED_INPUTS:  # the encoded copies must line up with the WAV, as the device test assumes
+        decoded = audio.load_audio((AUDIO_DIR / name).read_bytes(), spec.sample_rate, filename=name)
+        offset = envelope_offset_ms(loop, decoded, spec.sample_rate)
+        assert abs(offset) <= 5, f"Python decodes {name} {offset} ms off loop.wav"
+    logfreqspec = vamp.collect(loop, spec.sample_rate, "nnls-chroma:nnls-chroma", output="logfreqspec",
+                               block_size=features.NNLS_BLOCK, step_size=spec.hop)["matrix"][1]
+    return {
+        "environment": _environment(),
+        "spec": spec.to_dict(),
+        "frame_times": spec.frame_times(3).tolist(),
+        "inputs": inputs,
+        "encoded": [{"file": name, "reference": "loop.wav"} for name in ENCODED_INPUTS],
+        "logfreqspec": {"file": "loop.wav", "values": _f32_rows(logfreqspec)},
+    }
+
+
+FILES = {"vocab": vocab_golden, "theory": theory_golden, "lm": lm_golden, "decode": decode_golden,
+         "features": features_golden}
+NEEDS_NNLS = {"features"}  # skipped by default where the NNLS Chroma plugin is not installed
+GZIPPED = {"features"}  # large, so stored compressed
+
+
+def golden_path(out: Path, name: str) -> Path:
+    return out / (f"{name}.json.gz" if name in GZIPPED else f"{name}.json")
+
+
+def read_golden(out: Path, name: str) -> dict:
+    data = golden_path(out, name).read_bytes()
+    return json.loads(gzip.decompress(data) if name in GZIPPED else data)
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", default=str(DEFAULT_OUT))
     parser.add_argument("--only", choices=sorted(FILES), action="append")
+    parser.add_argument("--render-audio", action="store_true",
+                        help=f"re-render the committed audio inputs in {AUDIO_DIR} first")
     args = parser.parse_args(argv)
+    if args.render_audio:
+        render_audio()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    for name in args.only or FILES:
-        text = json.dumps(FILES[name](), ensure_ascii=False, allow_nan=False, separators=(",", ":"))
-        (out / f"{name}.json").write_text(text + "\n", encoding="utf-8")
-        print(f"{name}.json: {len(text) / 1024:.0f} KB")
+    names = args.only
+    if names is None:
+        from chordify_core.features import nnls_available
+
+        names = [n for n in FILES if n not in NEEDS_NNLS or nnls_available()]
+        for skipped in FILES.keys() - set(names):
+            print(f"{golden_path(out, skipped).name}: skipped, needs NNLS Chroma (tools/mobile_goldens.sh)")
+    for name in names:
+        text = json.dumps(FILES[name](), ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
+        path = golden_path(out, name)
+        if name in GZIPPED:
+            path.write_bytes(gzip.compress(text.encode("utf-8"), mtime=0))
+        else:
+            path.write_text(text, encoding="utf-8")
+        print(f"{path.name}: {path.stat().st_size / 1024:.0f} KB")
     return 0
 
 
