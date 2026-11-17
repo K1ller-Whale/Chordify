@@ -1056,8 +1056,8 @@ class NnlsChromaDeviceTest {
 
 - [ ] **Step 5: Run it to make sure it fails**
 
-Run: `cd Mobile && ./gradlew :engine:api34DebugAndroidTest`
-Expected: the build fails compiling the device tests, with `Unresolved reference 'SampleSink'` and `Unresolved reference 'NnlsChroma'`. (Gradle may first say it is setting up the managed device; that is expected.)
+Run: `cd Mobile && ./gradlew :engine:compileDebugAndroidTestKotlin`
+Expected: compiling the device tests fails, with `Unresolved reference 'SampleSink'` and `Unresolved reference 'NnlsChroma'`. (`:engine:api34DebugAndroidTest` would stop earlier, at CMake, because `CMakeLists.txt` only arrives in Step 7.)
 
 - [ ] **Step 6: Vendor the third-party sources**
 
@@ -1497,6 +1497,8 @@ target_compile_options(vamp_hostsdk PRIVATE ${PARITY_FLAGS} -w)
 
 # NNLS Chroma, compiled into the host's namespace so the adapter wraps it directly, with the
 # optimisation flags of its Makefile.linux (how tools/install_nnls_chroma.sh builds it).
+# -ffast-math comes before PARITY_FLAGS: it turns contraction back on, so -ffp-contract=off must
+# follow it, and CMake drops a repeated option rather than keeping its last place.
 set(NNLS ${THIRD_PARTY}/nnls-chroma)
 add_library(nnls_chroma STATIC
     ${NNLS}/NNLSBase.cpp
@@ -1506,13 +1508,13 @@ add_library(nnls_chroma STATIC
     nnls_factory.cpp)
 target_include_directories(nnls_chroma PRIVATE ${NNLS} ${VAMP_SDK})
 target_compile_definitions(nnls_chroma PRIVATE _VAMP_PLUGIN_IN_HOST_NAMESPACE)
-target_compile_options(nnls_chroma PRIVATE ${PARITY_FLAGS} -ftree-vectorize -ffast-math -ffp-contract=off -w)
+target_compile_options(nnls_chroma PRIVATE -ftree-vectorize -ffast-math ${PARITY_FLAGS} -w)
 
 add_library(chordify_engine SHARED nnls_host.cpp nnls_jni.cpp)
 target_compile_options(chordify_engine PRIVATE ${PARITY_FLAGS} -Wall)
 target_link_libraries(chordify_engine PRIVATE nnls_chroma vamp_hostsdk log)
 ```
-`-ffp-contract=off` comes after `-ffast-math` on purpose: `-ffast-math` would turn contraction back on.
+`-ffast-math` comes before `PARITY_FLAGS` on purpose: it would turn contraction back on, and CMake removes a repeated `-ffp-contract=off` instead of keeping the later one. Check the order in `Mobile/engine/.cxx/**/compile_commands.json`: `-ffast-math -O3 -ffp-contract=off`.
 
 - [ ] **Step 8: Write the Kotlin side**
 
@@ -2054,6 +2056,8 @@ target_compile_options(vamp_hostsdk PRIVATE ${PARITY_FLAGS} -w)
 
 # NNLS Chroma, compiled into the host's namespace so the adapter wraps it directly, with the
 # optimisation flags of its Makefile.linux (how tools/install_nnls_chroma.sh builds it).
+# -ffast-math comes before PARITY_FLAGS: it turns contraction back on, so -ffp-contract=off must
+# follow it, and CMake drops a repeated option rather than keeping its last place.
 set(NNLS ${THIRD_PARTY}/nnls-chroma)
 add_library(nnls_chroma STATIC
     ${NNLS}/NNLSBase.cpp
@@ -2063,14 +2067,14 @@ add_library(nnls_chroma STATIC
     nnls_factory.cpp)
 target_include_directories(nnls_chroma PRIVATE ${NNLS} ${VAMP_SDK})
 target_compile_definitions(nnls_chroma PRIVATE _VAMP_PLUGIN_IN_HOST_NAMESPACE)
-target_compile_options(nnls_chroma PRIVATE ${PARITY_FLAGS} -ftree-vectorize -ffast-math -ffp-contract=off -w)
+target_compile_options(nnls_chroma PRIVATE -ftree-vectorize -ffast-math ${PARITY_FLAGS} -w)
 
 add_library(chordify_engine SHARED nnls_host.cpp nnls_jni.cpp soxr_jni.cpp)
 target_include_directories(chordify_engine PRIVATE ${THIRD_PARTY}/libsoxr/src)
 target_compile_options(chordify_engine PRIVATE ${PARITY_FLAGS} -Wall)
 target_link_libraries(chordify_engine PRIVATE nnls_chroma vamp_hostsdk soxr log)
 ```
-libsoxr's CMake finds its SIMD engine on both ABIs (the configure log under `Mobile/engine/.cxx` says `Found SIMD32`), as python-soxr's x86-64 build does, so the HQ resampler runs the same code path.
+libsoxr's CMake finds its SIMD engine on both ABIs (`CMakeCache.txt` under `Mobile/engine/.cxx` has `WITH_CR32S:BOOL=ON`), as python-soxr's x86-64 build does, so the HQ resampler runs the same code path.
 
 - [ ] **Step 7: Run the device tests to make sure they pass**
 
