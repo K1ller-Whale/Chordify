@@ -17,7 +17,7 @@ from pathlib import Path
 
 import numpy as np
 
-from chordify_core import lm, theory, vocab
+from chordify_core import decode, lm, theory, vocab
 from chordify_core.theory import Key
 
 REPO = Path(__file__).resolve().parents[2]
@@ -240,7 +240,138 @@ def lm_golden() -> dict:
     }
 
 
-FILES = {"vocab": vocab_golden, "theory": theory_golden, "lm": lm_golden}
+# ---------------------------------------------------------------------------
+# decode
+# ---------------------------------------------------------------------------
+
+FPS = 44100 / 2048
+NNLS_OFFSET = 16384 / 2 / 44100
+
+
+def _truth(blocks: list[tuple[int, int]]) -> list[int]:
+    return [cls for cls, frames in blocks for _ in range(frames)]
+
+
+def _posteriors(truth: list[int], n_classes: int, rng: Lcg, flicker: float = 0.1) -> list[list[float]]:
+    """Frame posteriors that favour the true class, with random flicker to another class."""
+    rows = []
+    for cls in truth:
+        row = [0.02 + 0.3 * rng.random() for _ in range(n_classes)]
+        row[cls] += 1.0
+        if rng.random() < flicker:
+            row[int(rng.random() * n_classes)] += 1.2
+        total = sum(row)
+        rows.append([round(v / total, 6) for v in row])
+    return rows
+
+
+def _change_prob(truth: list[int], rng: Lcg) -> list[float]:
+    return [round(0.05 + 0.1 * rng.random() + (0.8 if t > 0 and truth[t] != truth[t - 1] else 0.0), 6)
+            for t in range(len(truth))]
+
+
+def _distribution(n: int, rng: Lcg) -> list[float]:
+    raw = [0.1 + rng.random() for _ in range(n)]
+    return [round(v / sum(raw), 6) for v in raw]
+
+
+def _change_matrix(n: int, rng: Lcg) -> list[list[float]]:
+    rows = []
+    for i in range(n):
+        raw = [0.0 if j == i else 0.05 + rng.random() for j in range(n)]
+        rows.append([round(v / sum(raw), 6) for v in raw])
+    return rows
+
+
+UNIT_CASES = [
+    (3.0, None, 10.0, 1),
+    (2.05, [], 10.0, 1),
+    (2.0, [1.0], 10.0, 1),
+    (10.0, [1.0, 1.5, 2.0, 2.5, 3.0], 10.0, 1),
+    (10.0, [0.0, 2.0, 2.5, 3.0, 5.5, 6.0, 6.5], FPS, 2),
+    (8.0, [0.8, 1.3, 1.8, 2.3, 9.0], 10.0, 3),
+    (7.3, [2.0, 2.5, 3.0, 3.5, 4.0, 4.0005], FPS, 1),
+]
+
+
+def decode_golden() -> dict:
+    rng = Lcg(20261117)
+    cases = []
+
+    truth = _truth([(0, 30), (7, 25), (21, 40), (5, 30), (24, 15), (0, 60)])
+    cases.append({"name": "frame units, default settings", "posteriors": _posteriors(truth, 25, rng),
+                  "frame_rate": 10.0, "options": {}})
+
+    truth = _truth([(0, 43), (7, 43), (21, 22), (17, 21), (5, 64), (24, 21), (0, 86)])
+    cases.append({"name": "beats, boundary head, prior (server-like settings)",
+                  "posteriors": _posteriors(truth, 25, rng), "frame_rate": FPS,
+                  "options": {"beats": [round(0.3 + 0.5 * i, 6) for i in range(28)],
+                              "change_prob": _change_prob(truth, rng), "prior": _distribution(25, rng),
+                              "alpha": 0.3, "self_prob": 0.6, "boundary_weight": 1.0, "subdivide": 2,
+                              "frame_offset": NNLS_OFFSET, "duration": 14.2}})
+
+    truth = _truth([(24, 50), (2, 40), (9, 6), (2, 30), (14, 50), (19, 44)])
+    beats = [2.0 + 0.5 * i for i in range(8)] + [7.5 + 0.5 * i for i in range(8)]
+    cases.append({"name": "change matrix, intro, gap and fade-out without beats, short fragments merged",
+                  "posteriors": _posteriors(truth, 25, rng, flicker=0.25), "frame_rate": FPS,
+                  "options": {"beats": beats, "change_matrix": _change_matrix(25, rng), "min_units": 2,
+                              "n_alternatives": 2, "frame_offset": NNLS_OFFSET}})
+
+    truth = _truth([(0, 25), (36, 20), (51, 30), (19, 25), (60, 20), (40, 30)])
+    cases.append({"name": "sevenths vocabulary, frame units, three-frame minimum",
+                  "posteriors": _posteriors(truth, 61, rng, flicker=0.3), "frame_rate": 10.0,
+                  "options": {"min_units": 3}})
+
+    truth = _truth([(3, 40), (10, 40)])
+    cases.append({"name": "one beat only falls back to frame units",
+                  "posteriors": _posteriors(truth, 25, rng), "frame_rate": 10.0,
+                  "options": {"beats": [2.0], "self_prob": 0.9, "alpha": 0.0}})
+
+    for case in cases:
+        options = {k: np.asarray(v) if isinstance(v, list) else v for k, v in case["options"].items()}
+        segments = decode.decode(np.asarray(case["posteriors"]), case["frame_rate"], **options)
+        case["segments"] = [[s.start, s.end, s.index, s.confidence, [[i, p] for i, p in s.alternatives]]
+                            for s in segments]
+
+    viterbi = []
+    for n_steps, n_states in ((20, 5), (12, 3)):
+        log_emissions = [[round(np.log(0.05 + rng.random()), 6) for _ in range(n_states)] for _ in range(n_steps)]
+        stay = [round(0.3 + 0.6 * rng.random(), 6) for _ in range(n_steps)]
+        matrix = _change_matrix(n_states, rng)
+        path = decode.viterbi(np.asarray(log_emissions), np.asarray(stay), np.asarray(matrix))
+        viterbi.append({"log_emissions": log_emissions, "stay": stay, "change_matrix": matrix, "path": path.tolist()})
+
+    inversions = []
+    for label in ("C:maj", "C:maj7", "G:7", "A:min", "N"):
+        for boosted in (0, 4, 10):
+            probs = [0.01 + 0.05 * rng.random() for _ in range(13)]
+            probs[boosted] += 0.6
+            probs = [round(p, 6) for p in probs]
+            for threshold in (0.3, 0.5, 0.95):
+                inversions.append({"label": label, "bass_probs": probs, "threshold": threshold,
+                                   "result": decode.inversion(label, np.asarray(probs), threshold)})
+
+    posteriors = [[round(rng.random(), 6) for _ in range(4)] for _ in range(10)]
+    times = [round(0.05 + 0.1 * i, 6) for i in range(10)]
+    windows = [(0.0, 0.3), (0.32, 0.34), (0.95, 2.0), (0.5, 0.5)]
+
+    return {
+        "decode": cases,
+        "unit_boundaries": [{"duration": d, "beats": b, "frame_rate": fr, "subdivide": s,
+                             "result": decode.unit_boundaries(d, None if b is None else np.asarray(b), fr, s).tolist()}
+                            for d, b, fr, s in UNIT_CASES],
+        "viterbi": viterbi,
+        "combine_stay": [{"self_prob": sp, "p_change": p, "weight": w, "result": decode.combine_stay(sp, p, w)}
+                         for sp in (0.6, 0.75, 0.97) for p in (1e-4, 0.3, 0.9999) for w in (0.0, 0.5, 1.0)],
+        "inversion": inversions,
+        "mean_over": {"posteriors": posteriors, "frame_times": times,
+                      "windows": [{"start": a, "end": b,
+                                   "result": decode.mean_over(np.asarray(posteriors), np.asarray(times), a, b).tolist()}
+                                  for a, b in windows]},
+    }
+
+
+FILES = {"vocab": vocab_golden, "theory": theory_golden, "lm": lm_golden, "decode": decode_golden}
 
 
 def main(argv: list[str] | None = None) -> int:
