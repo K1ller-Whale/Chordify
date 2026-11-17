@@ -2,10 +2,12 @@ package com.arbaba.chordifymobile.engine
 
 import androidx.test.platform.app.InstrumentationRegistry
 import com.arbaba.chordifymobile.engine.audio.SampleSink
+import com.arbaba.chordifymobile.engine.util.pyRoundToInt
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /** Audio for the device tests: the golden inputs, and WAV files written on the spot. */
 object TestAudio {
@@ -94,6 +96,35 @@ object TestAudio {
             at += part.size
         }
         return out
+    }
+
+    /** chordify_ai.export.mobile_goldens.envelope_offset_ms: how late [other] is against
+     *  [reference], in ms, from the lag (within ±200 ms) that best lines up their 5 ms RMS envelopes. */
+    fun envelopeOffsetMs(reference: FloatArray, other: FloatArray, sampleRate: Int): Double {
+        val hop = pyRoundToInt(sampleRate * 0.005)
+        fun envelope(y: FloatArray): DoubleArray {
+            val e = DoubleArray(y.size / hop) { i ->
+                var sum = 0.0
+                for (k in i * hop until (i + 1) * hop) sum += y[k].toDouble() * y[k]
+                sqrt(sum / hop)
+            }
+            val mean = e.average()
+            return DoubleArray(e.size) { e[it] - mean }
+        }
+        val a = envelope(reference)
+        val b = envelope(other)
+        var best = 0
+        var bestScore = Double.NEGATIVE_INFINITY
+        for (lag in -40..40) {
+            val (x0, y0) = if (lag >= 0) 0 to lag else -lag to 0
+            var score = 0.0
+            for (i in 0 until minOf(a.size - x0, b.size - y0)) score += a[x0 + i] * b[y0 + i]
+            if (score > bestScore) {
+                best = lag
+                bestScore = score
+            }
+        }
+        return best * hop * 1000.0 / sampleRate
     }
 
     private fun text(bytes: ByteArray, at: Int) = String(bytes, at, 4, Charsets.US_ASCII)
