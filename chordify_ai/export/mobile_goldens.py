@@ -17,11 +17,12 @@ from pathlib import Path
 
 import numpy as np
 
-from chordify_core import theory, vocab
+from chordify_core import lm, theory, vocab
 from chordify_core.theory import Key
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_OUT = REPO / "Mobile" / "engine" / "src" / "test" / "resources" / "goldens"
+LM_MODEL = REPO / "models" / "progression-ngram" / "1.0.0" / "model.json.gz"
 
 
 class Lcg:
@@ -187,7 +188,59 @@ def theory_golden() -> dict:
     }
 
 
-FILES = {"vocab": vocab_golden, "theory": theory_golden}
+# ---------------------------------------------------------------------------
+# lm
+# ---------------------------------------------------------------------------
+
+LM_CASES = [
+    {"history": ["C:maj", "G:maj", "A:min", "F:maj", "C:maj", "G:maj", "A:min"], "key": [0, "major"],
+     "beats": [4.0] * 7, "k": 3},
+    {"history": ["D:maj", "A:7"], "key": [2, "major"], "beats": None, "k": 5},
+    {"history": ["A:min", "G:maj", "F:maj", "E:maj"] * 3, "key": [9, "minor"], "beats": [2.0] * 12, "k": 3},
+    {"history": ["E:maj"], "key": [4, "major"], "beats": None, "k": 3},
+    {"history": ["Bb:maj7", "G:min7", "C:min7", "F:7"] * 2, "key": [10, "major"], "beats": [4.0, 2.0, 2.0, 4.0] * 2,
+     "k": 4},
+    {"history": ["C:maj", "N", "G:maj", "G:maj", "D:min"], "key": [0, "major"], "beats": None, "k": 3},
+    {"history": ["F#:min", "D:maj", "A:maj", "E:maj"] * 2 + ["F#:min"], "key": [6, "minor"],
+     "beats": [4.0, 0.0, 4.0, 2.0] * 2 + [4.0], "k": 3},
+    {"history": [], "key": [0, "major"], "beats": None, "k": 3},
+]
+TOKEN_LABELS = ["C:maj", "A:min", "G:7", "B:dim", "F:sus4", "E:aug", "D:min7", "N", "X", "Bb:maj/3"]
+TOKEN_KEYS = [Key(0, "major"), Key(9, "minor"), Key(3, "major"), Key(6, "minor")]
+
+
+def lm_golden() -> dict:
+    model = lm.NgramProgressionModel.load(LM_MODEL)
+    cases = []
+    for case in LM_CASES:
+        key = Key(*case["key"])
+        tokens = [lm.token(h, key) for h in case["history"] if vocab.parse(h).is_chord]
+        cache, context = model.cache_counts(tokens)
+        mixed, _ = model.distribution(tokens)
+        predictions, prior = lm.predict_next(model, case["history"], key, k=case["k"], history_beats=case["beats"])
+        cases.append({**case, "tokens": tokens, "corpus": model.corpus_distribution(tokens), "cache": dict(cache),
+                      "cache_context": context, "mixed": mixed,
+                      "top": [[c.token, c.p, c.cache_count] for c in model.top(tokens, case["k"])],
+                      "predictions": [p.to_dict() for p in predictions], "prior": prior})
+    return {
+        "params": {"order": model.order, "min_count": model.min_count, "cache_weight": model.cache_weight,
+                   "max_context": model.max_context},
+        "token_list": list(lm.TOKENS),
+        "tokens": [{"label": label, "tonic": k.tonic, "mode": k.mode, "token": lm.token(label, k)}
+                   for label in TOKEN_LABELS for k in TOKEN_KEYS],
+        "token_labels": [{"token": t, "tonic": k.tonic, "mode": k.mode, "label": lm.token_label(t, k)}
+                         for t in lm.TOKENS for k in TOKEN_KEYS],
+        "cases": cases,
+        "change_matrix": [
+            {"vocabulary": "majmin", "tonic": 3, "mode": "major",
+             "matrix": model.change_matrix(vocab.MAJMIN, Key(3, "major")).tolist()},
+            {"vocabulary": "sevenths", "tonic": 9, "mode": "minor",
+             "matrix": model.change_matrix(vocab.SEVENTHS, Key(9, "minor")).tolist()},
+        ],
+    }
+
+
+FILES = {"vocab": vocab_golden, "theory": theory_golden, "lm": lm_golden}
 
 
 def main(argv: list[str] | None = None) -> int:
