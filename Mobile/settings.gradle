@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Chordify Mobile"
 include ':app'
+include ':engine'
