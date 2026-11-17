@@ -36,6 +36,8 @@ target_compile_options(vamp_hostsdk PRIVATE ${PARITY_FLAGS} -w)
 
 # NNLS Chroma, compiled into the host's namespace so the adapter wraps it directly, with the
 # optimisation flags of its Makefile.linux (how tools/install_nnls_chroma.sh builds it).
+# -ffast-math comes before PARITY_FLAGS: it turns contraction back on, so -ffp-contract=off must
+# follow it, and CMake drops a repeated option rather than keeping its last place.
 set(NNLS ${THIRD_PARTY}/nnls-chroma)
 add_library(nnls_chroma STATIC
     ${NNLS}/NNLSBase.cpp
@@ -45,7 +47,7 @@ add_library(nnls_chroma STATIC
     nnls_factory.cpp)
 target_include_directories(nnls_chroma PRIVATE ${NNLS} ${VAMP_SDK})
 target_compile_definitions(nnls_chroma PRIVATE _VAMP_PLUGIN_IN_HOST_NAMESPACE)
-target_compile_options(nnls_chroma PRIVATE ${PARITY_FLAGS} -ftree-vectorize -ffast-math -ffp-contract=off -w)
+target_compile_options(nnls_chroma PRIVATE -ftree-vectorize -ffast-math ${PARITY_FLAGS} -w)
 
 add_library(chordify_engine SHARED nnls_host.cpp nnls_jni.cpp soxr_jni.cpp)
 target_include_directories(chordify_engine PRIVATE ${THIRD_PARTY}/libsoxr/src)
