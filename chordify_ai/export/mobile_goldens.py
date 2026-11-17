@@ -15,10 +15,24 @@ import argparse
 import json
 from pathlib import Path
 
-from chordify_core import vocab
+import numpy as np
+
+from chordify_core import theory, vocab
+from chordify_core.theory import Key
 
 REPO = Path(__file__).resolve().parents[2]
 DEFAULT_OUT = REPO / "Mobile" / "engine" / "src" / "test" / "resources" / "goldens"
+
+
+class Lcg:
+    """64-bit linear congruential generator: the same numbers on every platform."""
+
+    def __init__(self, seed: int):
+        self.state = seed
+
+    def random(self) -> float:
+        self.state = (6364136223846793005 * self.state + 1442695040888963407) % 2**64
+        return (self.state >> 11) / 2**53
 
 
 def _attempt(fn, *args) -> dict:
@@ -97,7 +111,83 @@ def vocab_golden() -> dict:
     }
 
 
-FILES = {"vocab": vocab_golden}
+# ---------------------------------------------------------------------------
+# theory
+# ---------------------------------------------------------------------------
+
+PARSE_KEY_TEXTS = ["D", "D:maj", "D major", "Bb:min", "F#m", "A minor", "C:minor", "Eb maj", "G#:m", "FM",
+                   "Db  major", "Gbb:min", " E ", "C#:major", "a minor", "H", "", "C mixolydian"]
+DESCRIBE_KEYS = [Key(0, "major"), Key(3, "major"), Key(6, "major"), Key(9, "minor"), Key(0, "minor"), Key(8, "minor")]
+DESCRIBE_EXTRA = ["X", "C:maj/3", "G:7/b7", "A:sus4(b7)", "C:maj(9)", "F#:hdim7/b3", "C:5"]
+PAIR_KEYS = [Key(0, "major"), Key(9, "minor"), Key(3, "major"), Key(6, "minor")]
+PAIR_LABELS = (list(vocab.MAJMIN.labels[:-1]) + [f"{n}:7" for n in vocab.SHARP_NAMES]
+               + [f"{n}:dim" for n in vocab.SHARP_NAMES] + ["N"])
+ESTIMATE_CASES = [
+    [("C:maj", 2.0), ("G:maj", 2.0), ("A:min", 2.0), ("F:maj", 2.0)] * 2,
+    [("A:min", 2.0), ("G:maj", 2.0), ("F:maj", 2.0), ("E:maj", 2.0)] * 2,
+    [("D:maj", 4.0), ("A:7", 4.0), ("B:min", 4.0), ("G:maj", 4.0)],
+    [("C:min7", 4.0), ("F:7", 4.0), ("Bb:maj7", 8.0)],
+    [("E:maj", 1.0)],
+    [("N", 3.0), ("C:maj", 1.0), ("N", 2.0)],
+    [("N", 3.0)],
+    [],
+]
+PATTERN_CASES = [
+    {"numerals": ["I", "V", "vi", "IV"] * 4},
+    {"numerals": ["vi", "IV", "I", "V"] * 3 + ["vi"]},
+    {"numerals": ["I", "I", "V", "V", "vi", "IV"] * 3},
+    {"numerals": ["i", "VII", "VI", "V"] * 3},
+    {"numerals": ["ii", "V", "I", "ii", "V", "I", "ii", "V", "I", "vii°", "I"]},
+    {"numerals": ["I", None, "V", "", "vi°", "IV", "I", "V", "vi", "IV", "I", "V", "vi", "IV"]},
+    {"numerals": ["I", "bVII", "IV", "I"] * 3, "lengths": [4, 3, 2], "min_count": 2, "limit": 5},
+    {"numerals": ["I", "IV"] * 5, "lengths": [2], "min_count": 2},
+    {"numerals": []},
+]
+
+
+def _key_score_inputs() -> list[list[float]]:
+    rng = Lcg(12)
+    major = [1.0 if pc in (0, 2, 4, 5, 7, 9, 11) else 0.0 for pc in range(12)]
+    minor = [1.0 if pc in (9, 11, 0, 2, 4, 5, 8) else 0.0 for pc in range(12)]
+    noisy = [[round(rng.random() * 3, 6) for _ in range(12)] for _ in range(3)]
+    return [major, minor, [0.0] * 12, *noisy]
+
+
+def _parse_key(text: str) -> dict:
+    key = theory.parse_key(text)
+    return {"tonic": key.tonic, "mode": key.mode}
+
+
+def theory_golden() -> dict:
+    describe_labels = list(vocab.LARGE.labels) + DESCRIBE_EXTRA
+    estimates = []
+    for chords in ESTIMATE_CASES:
+        key, confidence = theory.estimate_key_from_chords(chords)
+        estimates.append({"chords": [[label, duration] for label, duration in chords],
+                          "tonic": key.tonic, "mode": key.mode, "confidence": confidence})
+    patterns = []
+    for case in PATTERN_CASES:
+        options = {k: v for k, v in case.items() if k != "numerals"}
+        patterns.append({**case, "result": theory.find_patterns(case["numerals"], **options)})
+    return {
+        "keys": [{"tonic": k.tonic, "mode": k.mode, "flats": k.flats, "tonic_name": k.tonic_name, "name": k.name,
+                  "scale": list(k.scale)} for k in theory.ALL_KEYS],
+        "parse_key": [{"text": text, **_attempt(_parse_key, text)} for text in PARSE_KEY_TEXTS],
+        "describe": [{"tonic": k.tonic, "mode": k.mode, "label": label, "diatonic": theory.is_diatonic(label, k),
+                      **theory.describe(label, k)} for k in DESCRIBE_KEYS for label in describe_labels],
+        "pairs": [{"tonic": k.tonic, "mode": k.mode, "labels": PAIR_LABELS,
+                   "reason": [[theory.transition_reason(a, b, k) for b in PAIR_LABELS] for a in PAIR_LABELS],
+                   "cadence": [[theory.cadence(a, b, k) for b in PAIR_LABELS] for a in PAIR_LABELS]}
+                  for k in PAIR_KEYS],
+        "key_scores": [{"chroma": chroma,
+                        "scores": [[k.tonic, k.mode, score] for k, score in theory.key_scores(np.asarray(chroma))]}
+                       for chroma in _key_score_inputs()],
+        "estimate_key": estimates,
+        "patterns": patterns,
+    }
+
+
+FILES = {"vocab": vocab_golden, "theory": theory_golden}
 
 
 def main(argv: list[str] | None = None) -> int:
