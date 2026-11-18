@@ -53,6 +53,14 @@ class WavWriter(file: File, private val sampleRate: Int) : Closeable {
     }
 }
 
+/** The level of [count] samples, 0 to 1: their RMS over full scale. */
+fun rms(pcm: ShortArray, count: Int): Float {
+    if (count <= 0) return 0f
+    var sum = 0.0
+    for (i in 0 until count) sum += pcm[i].toDouble() * pcm[i]
+    return (kotlin.math.sqrt(sum / count) / 32768.0).toFloat()
+}
+
 /** Recording from the microphone as the spec asks (§6.1): 44.1 kHz, 16-bit mono, from the
  *  UNPROCESSED source where the phone has one, else VOICE_RECOGNITION. */
 object Recorder {
@@ -71,7 +79,8 @@ object Recorder {
      *  early, keeping what it has, when the file cannot grow (storage full). Returns the samples
      *  written. Blocks: call it off the main thread. */
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
-    fun record(context: Context, file: File, isStopped: () -> Boolean, onSeconds: (Double) -> Unit): Long {
+    fun record(context: Context, file: File, isStopped: () -> Boolean, onLevel: (Float) -> Unit = {},
+               onSeconds: (Double) -> Unit): Long {
         val minimum = AudioRecord.getMinBufferSize(SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         val chunk = maxOf(minimum, SAMPLE_RATE / 10) // a tenth of a second
         val record = AudioRecord(source(context), SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO,
@@ -89,6 +98,7 @@ object Recorder {
                     } catch (_: IOException) {
                         break // storage full: keep what was recorded
                     }
+                    onLevel(rms(buffer, n))
                     onSeconds(wav.samples.toDouble() / SAMPLE_RATE)
                 }
                 return wav.samples
