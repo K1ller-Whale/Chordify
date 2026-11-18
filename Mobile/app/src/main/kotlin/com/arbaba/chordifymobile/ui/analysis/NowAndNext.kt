@@ -37,16 +37,17 @@ import com.arbaba.chordifymobile.music.isNoChord
 import com.arbaba.chordifymobile.ui.LocalChordifyColors
 
 @Composable
-private fun CardTitle(text: String) {
+internal fun CardTitle(text: String) {
     Text(text.uppercase(), style = MaterialTheme.typography.labelMedium, color = LocalChordifyColors.current.muted)
 }
 
 /** Now playing (NowAndNext.tsx): the chord, its numeral and function, what to play over it, the
  *  time to the change and its guitar shape. A polite live region, as the web's aria-live. */
 @Composable
-fun NowPlayingCard(chord: ChordSegment, result: AnalysisResult, time: () -> Double, notation: Notation, capo: Int, sounding: String?) {
+fun NowPlayingCard(chord: ChordSegment, result: AnalysisResult, time: () -> Double, notation: Notation, capo: Int, sounding: String?,
+                   modifier: Modifier = Modifier) {
     val colors = LocalChordifyColors.current
-    Card(Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
+    Card(modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             CardTitle("Now playing")
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -92,9 +93,10 @@ private fun ChangeCountdown(chord: ChordSegment, beats: List<Double>, time: () -
 /** What comes next (NowAndNext.tsx): the predictions with their reasons, the chord that really
  *  came next, and the prediction without the song's own history. */
 @Composable
-fun NextChordCard(chord: ChordSegment, actualNext: ChordSegment?, chordsByDisplay: Map<String, ChordSegment>, notation: Notation) {
+fun NextChordCard(chord: ChordSegment, actualNext: ChordSegment?, chordsByDisplay: Map<String, ChordSegment>, notation: Notation,
+                  modifier: Modifier = Modifier) {
     val colors = LocalChordifyColors.current
-    Card(Modifier.fillMaxWidth()) {
+    Card(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             CardTitle("What comes next")
             if (chord.next.isEmpty()) Text("Predictions appear once a chord is playing.", style = MaterialTheme.typography.bodySmall)

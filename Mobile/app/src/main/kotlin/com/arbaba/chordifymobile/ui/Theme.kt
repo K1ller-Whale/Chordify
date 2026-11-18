@@ -33,9 +33,10 @@ private val Dark = darkColorScheme(
     error = Color(0xFFF2B8B5), onError = Color(0xFF0B0B0B),
 )
 
-/** The web's tokens Material 3 has no slot for: harmonic functions, muted text, the grid. */
+/** The web's tokens Material 3 has no slot for: harmonic functions, muted text, the grid, and
+ *  [tint], how much of its function colour a chord that is not playing shows (--tint). */
 data class ChordifyColors(val tonic: Color, val subdominant: Color, val dominant: Color, val borrowed: Color,
-                          val muted: Color, val grid: Color) {
+                          val muted: Color, val grid: Color, val tint: Float) {
     fun of(hue: FunctionHue): Color = when (hue) {
         FunctionHue.TONIC -> tonic
         FunctionHue.SUBDOMINANT -> subdominant
@@ -46,9 +47,9 @@ data class ChordifyColors(val tonic: Color, val subdominant: Color, val dominant
 }
 
 private val LightTokens = ChordifyColors(Color(0xFF2A78D6), Color(0xFF1BAF7A), Color(0xFFEB6834), Color(0xFF898781),
-                                         Color(0xFF898781), Color(0xFFE1E0D9))
+                                         Color(0xFF898781), Color(0xFFE1E0D9), tint = 0.22f)
 private val DarkTokens = ChordifyColors(Color(0xFF3987E5), Color(0xFF199E70), Color(0xFFD95926), Color(0xFF898781),
-                                        Color(0xFF898781), Color(0xFF2C2C2A))
+                                        Color(0xFF898781), Color(0xFF2C2C2A), tint = 0.30f)
 
 val LocalChordifyColors = staticCompositionLocalOf { LightTokens }
 
