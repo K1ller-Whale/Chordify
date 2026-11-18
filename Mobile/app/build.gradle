@@ -83,6 +83,7 @@ dependencies {
     debugImplementation libs.compose.ui.test.manifest
 
     testImplementation libs.junit
+    testImplementation libs.kotlinx.serialization.json
     androidTestImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.androidx.test.runner
