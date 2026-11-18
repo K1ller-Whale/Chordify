@@ -129,8 +129,6 @@ class Library(
 
     suspend fun reportFailed(id: String, code: String, message: String) = dao.setFailed(id, code, message)
 
-    suspend fun reportCancelled(id: String) = dao.setCancelled(id)
-
     suspend fun reportCompleted(id: String, result: AnalysisResult) = withContext(Dispatchers.IO) {
         resultsDir.mkdirs()
         val file = resultFile(id)

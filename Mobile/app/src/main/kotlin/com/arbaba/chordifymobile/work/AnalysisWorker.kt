@@ -11,7 +11,6 @@ import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.ForegroundInfo
 import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
@@ -28,7 +27,6 @@ import com.arbaba.chordifymobile.engine.audio.AudioSource
 import com.arbaba.chordifymobile.ui.stageLabel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -75,6 +73,7 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : CoroutineWork
                     val reporter = launch {
                         var shown = -1
                         progress.collect { (stage, fraction) ->
+                            if (isStopped) return@collect // the row may already be the next run's
                             library.reportProgress(id, stage.id, fraction)
                             val percent = (fraction * 100).roundToInt()
                             if (percent >= shown + 5 || stage == Stage.DONE) {
@@ -93,13 +92,11 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : CoroutineWork
                         )
                     }.also { reporter.cancel() }
                 }
-                library.reportCompleted(id, result)
+                if (!isStopped) library.reportCompleted(id, result)
                 Result.success()
             } catch (_: CancelledException) {
-                stopped(id)
                 Result.failure()
             } catch (error: CancellationException) {
-                stopped(id)
                 throw error
             } catch (error: EngineException) {
                 library.reportFailed(id, error.code.name, error.message ?: error.code.name)
@@ -111,12 +108,9 @@ class AnalysisWorker(context: Context, params: WorkerParameters) : CoroutineWork
         }
     }
 
-    /** Cancelled by the user: the row says so. Stopped by the system: WorkManager runs it again. */
-    private suspend fun stopped(id: String) = withContext(NonCancellable) {
-        if (stopReason == WorkInfo.STOP_REASON_CANCELLED_BY_APP) {
-            (applicationContext as ChordifyApp).container.library.reportCancelled(id)
-        }
-    }
+    // A stopped job leaves the row alone. Cancelled by the user, Library.cancel has marked it
+    // already; replaced by a retry (REPLACE), the row is the new run's, and marking it cancelled
+    // here once stopped the retried run too; stopped by the system, WorkManager runs it again.
 
     /** A job started while the app is in the background may not become a foreground service; it
      *  then runs as an ordinary job. */
