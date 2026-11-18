@@ -22,11 +22,14 @@ class MainActivityTest {
     fun theFourTabsOpenTheirScreens() {
         compose.onNodeWithText("Pick a file").assertIsDisplayed()
         compose.onNodeWithText("Quick chord").performClick()
-        compose.onNodeWithText("Quick chord is not built yet.").assertIsDisplayed()
+        compose.onNodeWithText("Record a chord").assertIsDisplayed()
         compose.onNodeWithText("Songwriter").performClick()
-        compose.onNodeWithText("Songwriter is not built yet.").assertIsDisplayed()
+        compose.onNodeWithText("Suggest the next chord").assertIsDisplayed()
         compose.onNodeWithText("Settings").performClick()
-        compose.onNodeWithText("Settings is not built yet.").assertIsDisplayed()
+        compose.onNodeWithText("Major and minor chords only").assertIsDisplayed()
+        compose.onNodeWithText("About Chordify").performClick()
+        compose.onNodeWithText("Source code").assertIsDisplayed()
+        compose.onNodeWithText("Settings").performClick()
         compose.onNodeWithText("Library").performClick()
         compose.onNodeWithText("Pick a file").assertIsDisplayed()
     }
