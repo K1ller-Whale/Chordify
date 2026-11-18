@@ -86,6 +86,7 @@ dependencies {
     androidTestImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.androidx.test.runner
+    androidTestImplementation libs.androidx.test.rules
     androidTestImplementation platform(libs.compose.bom)
     androidTestImplementation libs.compose.ui.test.junit4
 }
