@@ -33,7 +33,8 @@ class LibraryScreenTest {
                                onPick = { events += "pick" }, onRecord = { events += "record" },
                                onMajorMinorOnly = { events += "majorMinorOnly=$it" }, onDismissMessage = { events += "dismiss" },
                                onOpenAppSettings = null, onCancel = { events += "cancel $it" },
-                               onRetry = { events += "retry $it" }, onDelete = { events += "delete $it" })
+                               onRetry = { events += "retry $it" }, onDelete = { events += "delete $it" },
+                               onOpen = { events += "open $it" })
             }
         }
     }
@@ -64,7 +65,8 @@ class LibraryScreenTest {
         compose.onNodeWithText("Cancel").performClick()
         compose.onNodeWithText("Try again").performClick()
         compose.onNodeWithText("Analyse").performClick()
-        assertEquals(listOf("cancel running", "retry failed", "retry cancelled"), events)
+        compose.onNodeWithText("done.mp3").performClick()
+        assertEquals(listOf("cancel running", "retry failed", "retry cancelled", "open done"), events)
     }
 
     @Test

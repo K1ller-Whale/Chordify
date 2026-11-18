@@ -51,14 +51,14 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.arbaba.chordifymobile.data.Analysis
 import com.arbaba.chordifymobile.data.Status
-import com.arbaba.chordifymobile.ui.formatTime
+import com.arbaba.chordifymobile.music.formatTime
 import com.arbaba.chordifymobile.ui.stageLabel
 import com.arbaba.chordifymobile.ui.summary
 
 /** The Library tab (spec §6.2): pick a file or record, the "Major and minor only" default, and
  *  every analysis with its progress or error. */
 @Composable
-fun LibraryScreen(model: LibraryViewModel = viewModel()) {
+fun LibraryScreen(onOpen: (String) -> Unit, model: LibraryViewModel = viewModel()) {
     val context = LocalContext.current
     val analyses by model.analyses.collectAsStateWithLifecycle()
     val majorMinorOnly by model.majorMinorOnly.collectAsStateWithLifecycle()
@@ -113,6 +113,7 @@ fun LibraryScreen(model: LibraryViewModel = viewModel()) {
         onCancel = { model.cancel(it) },
         onRetry = { model.retry(it) },
         onDelete = { model.delete(it) },
+        onOpen = onOpen,
     )
 }
 
@@ -133,6 +134,7 @@ fun LibraryContent(
     onCancel: (String) -> Unit,
     onRetry: (String) -> Unit,
     onDelete: (String) -> Unit,
+    onOpen: (String) -> Unit,
 ) {
     var confirmDelete by remember { mutableStateOf<Analysis?>(null) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
@@ -175,7 +177,8 @@ fun LibraryContent(
             }
         }
         items(analyses, key = { it.id }) { analysis ->
-            AnalysisRow(analysis, onCancel, onRetry, onDelete = { if (analysis.ownsFile) confirmDelete = analysis else onDelete(analysis.id) })
+            AnalysisRow(analysis, onCancel, onRetry, onDelete = { if (analysis.ownsFile) confirmDelete = analysis else onDelete(analysis.id) },
+                        onOpen = { onOpen(analysis.id) })
         }
     }
     confirmDelete?.let { analysis ->
@@ -193,7 +196,8 @@ fun LibraryContent(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AnalysisRow(analysis: Analysis, onCancel: (String) -> Unit, onRetry: (String) -> Unit, onDelete: () -> Unit) {
+private fun AnalysisRow(analysis: Analysis, onCancel: (String) -> Unit, onRetry: (String) -> Unit, onDelete: () -> Unit,
+                        onOpen: () -> Unit) {
     val swipe = rememberSwipeToDismissBoxState(confirmValueChange = { value ->
         if (value == SwipeToDismissBoxValue.EndToStart) onDelete()
         false // the row goes away when the analysis does
@@ -208,7 +212,7 @@ private fun AnalysisRow(analysis: Analysis, onCancel: (String) -> Unit, onRetry:
         },
         modifier = Modifier.testTag("analysis-${analysis.id}"),
     ) {
-        Card(Modifier.fillMaxWidth()) {
+        Card(onClick = onOpen, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(analysis.displayName, fontWeight = FontWeight.SemiBold)
                 when (analysis.status) {

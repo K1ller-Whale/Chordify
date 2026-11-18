@@ -13,11 +13,4 @@ class FormattingTest {
         assertEquals("A minor · 120 BPM · 0:59", summary(row.copy(keyName = "A minor", bpm = 120.0, duration = 59.99)))
         assertEquals("E major · 1:05", summary(row.copy(keyName = "E major", bpm = null, duration = 65.0)))
     }
-
-    @Test
-    fun timesAreMinutesAndSeconds() {
-        assertEquals("0:00", formatTime(0.0))
-        assertEquals("0:07", formatTime(7.9))
-        assertEquals("15:00", formatTime(900.0))
-    }
 }

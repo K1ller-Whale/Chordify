@@ -10,8 +10,10 @@ network access. Design:
   `library.db`, the result documents in `files/results/`, the app's recordings in
   `files/recordings/`, and copies of shared files it cannot keep a permission for in
   `files/imports/`. `work/` runs each analysis as a WorkManager job, one at a time, as a
-  foreground service with a progress notification. `record/` records from the microphone, and
-  `ui/` holds the screens.
+  foreground service with a progress notification. `record/` records from the microphone.
+  `music/` ports the web app's `music.ts` and `capo.ts` (chord names, guitar shapes, capo),
+  `playback/` plays the analysed file with Media3 under one playback clock, and `ui/` holds the
+  screens.
 
 ## Build and test
 

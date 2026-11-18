@@ -35,6 +35,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.arbaba.chordifymobile.data.Settings
 import com.arbaba.chordifymobile.ui.ChordifyTheme
+import com.arbaba.chordifymobile.ui.analysis.AnalysisScreen
 import com.arbaba.chordifymobile.ui.library.LibraryScreen
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -106,7 +107,8 @@ fun ChordifyNavigation() {
         }
     }) { padding ->
         NavHost(navigation, startDestination = Tab.LIBRARY.route, modifier = Modifier.padding(padding)) {
-            composable(Tab.LIBRARY.route) { LibraryScreen() }
+            composable(Tab.LIBRARY.route) { LibraryScreen(onOpen = { navigation.navigate("analysis/$it") }) }
+            composable("analysis/{id}") { entry -> AnalysisScreen(entry.arguments!!.getString("id")!!) }
             composable(Tab.QUICK_CHORD.route) { NotBuiltYet("Quick chord") }
             composable(Tab.SONGWRITER.route) { NotBuiltYet("Songwriter") }
             composable(Tab.SETTINGS.route) { NotBuiltYet("Settings") }
