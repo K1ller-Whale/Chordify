@@ -27,6 +27,8 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Switch
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
@@ -151,10 +153,12 @@ fun LibraryContent(
             }
         }
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // The whole row toggles, so a screen reader reads the switch with its label.
+            Row(Modifier.toggleable(majorMinorOnly, role = Role.Switch, onValueChange = onMajorMinorOnly).testTag("majorMinorOnly"),
+                verticalAlignment = Alignment.CenterVertically) {
                 Text("Major and minor chords only (C instead of Cmaj7, G instead of G7)", Modifier.weight(1f))
                 Spacer(Modifier.width(12.dp))
-                Switch(checked = majorMinorOnly, onCheckedChange = onMajorMinorOnly, modifier = Modifier.testTag("majorMinorOnly"))
+                Switch(checked = majorMinorOnly, onCheckedChange = null)
             }
         }
         if (message != null) {
