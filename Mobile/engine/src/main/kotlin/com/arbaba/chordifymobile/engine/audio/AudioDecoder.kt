@@ -16,8 +16,14 @@ internal data class DecodedTrack(val sampleRate: Int, val channels: Int, val fra
  *  ogg, opus, wav, webm), mixes it to mono and hands it on chunk by chunk at the track's own sample
  *  rate, as chordify_core.audio.load_audio does before it resamples. */
 internal class AudioDecoder(private val source: AudioSource) {
-    /** Calls [onStart] once with the sample rate, then [onSamples] with every chunk. */
-    fun decode(isCancelled: () -> Boolean, onStart: (sampleRate: Int) -> Unit, onSamples: (FloatArray) -> Unit): DecodedTrack {
+    /** Calls [onStart] once with the sample rate, then [onSamples] with every chunk, and [onProgress]
+     *  with the share of the track read so far, when the container gives its duration. */
+    fun decode(
+        isCancelled: () -> Boolean,
+        onStart: (sampleRate: Int) -> Unit,
+        onSamples: (FloatArray) -> Unit,
+        onProgress: (Double) -> Unit = {},
+    ): DecodedTrack {
         val extractor = MediaExtractor()
         try {
             try {
@@ -34,7 +40,7 @@ internal class AudioDecoder(private val source: AudioSource) {
             val format = extractor.getTrackFormat(track)
             val codec = openCodec(format)
             try {
-                return pump(extractor, codec, format, isCancelled, onStart, onSamples)
+                return pump(extractor, codec, format, isCancelled, onStart, onSamples, onProgress)
             } catch (error: IllegalStateException) { // MediaCodec.CodecException is one
                 throw EngineException(ErrorCode.DECODE_FAILED, "Could not decode the file: ${error.message}", error)
             } finally {
@@ -71,7 +77,10 @@ internal class AudioDecoder(private val source: AudioSource) {
         isCancelled: () -> Boolean,
         onStart: (Int) -> Unit,
         onSamples: (FloatArray) -> Unit,
+        onProgress: (Double) -> Unit,
     ): DecodedTrack {
+        val durationUs = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) else 0L
+        var reported = 0.0
         val trimmer = EdgeTrimmer(format.intOr(MediaFormat.KEY_ENCODER_DELAY), format.intOr(MediaFormat.KEY_ENCODER_PADDING))
         val info = MediaCodec.BufferInfo()
         var inputDone = false
@@ -89,8 +98,16 @@ internal class AudioDecoder(private val source: AudioSource) {
                         codec.queueInputBuffer(index, 0, 0, 0, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
                         inputDone = true
                     } else {
-                        codec.queueInputBuffer(index, 0, size, extractor.sampleTime, 0)
+                        val time = extractor.sampleTime
+                        codec.queueInputBuffer(index, 0, size, time, 0)
                         extractor.advance()
+                        if (durationUs > 0) {
+                            val fraction = (time.toDouble() / durationUs).coerceIn(0.0, 1.0)
+                            if (fraction >= reported + PROGRESS_STEP) {
+                                reported = fraction
+                                onProgress(fraction)
+                            }
+                        }
                     }
                 }
             }
@@ -132,5 +149,6 @@ internal class AudioDecoder(private val source: AudioSource) {
     private companion object {
         const val TIMEOUT_US = 10_000L
         const val MAX_IDLE = 500 // 5 s without output after the end of the input
+        const val PROGRESS_STEP = 0.01 // report progress in steps of 1%
     }
 }

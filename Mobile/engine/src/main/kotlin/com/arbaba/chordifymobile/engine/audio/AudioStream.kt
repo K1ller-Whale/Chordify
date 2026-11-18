@@ -17,12 +17,15 @@ data class StreamInfo(val sourceSampleRate: Int, val sourceChannels: Int, val so
 
 /** Decodes [source] once, as mono 44.1 kHz audio, and gives every chunk to every sink in turn:
  *  the streaming form of the server's decode() and check_duration() (chordify_backend/app/
- *  audio_io.py), which hold the whole song in memory. Errors carry the server's codes. */
+ *  audio_io.py), which hold the whole song in memory. Errors carry the server's codes.
+ *  [onProgress] gets the share of the file read so far (0..1), in steps of about 1%, when the
+ *  container states its duration. */
 fun streamAudio(
     source: AudioSource,
     sinks: List<SampleSink>,
     limits: AudioLimits = AudioLimits(),
     isCancelled: () -> Boolean = { false },
+    onProgress: (Double) -> Unit = {},
 ): StreamInfo {
     var resampler: Resampler? = null
     var samples = 0L
@@ -40,6 +43,7 @@ fun streamAudio(
             isCancelled,
             onStart = { rate -> resampler = Resampler(rate, ANALYSIS_SAMPLE_RATE) },
             onSamples = { chunk -> emit(resampler!!.process(chunk)) },
+            onProgress = onProgress,
         )
         emit(resampler!!.finish())
         if (samples == 0L) throw EngineException(ErrorCode.DECODE_FAILED, "The file contains no audio samples.")

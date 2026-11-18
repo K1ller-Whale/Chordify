@@ -14,11 +14,17 @@ import com.arbaba.chordifymobile.engine.features.nnlsToCOrder
 class FrontEnd(val info: StreamInfo, val features: Array<FloatArray>, val onset: FloatArray, val beats: BeatInfo)
 
 /** Decodes [source] once and feeds NNLS Chroma and the beat tracker together, as the server's
- *  analyse() computes features.extract and track_beats from the same samples. */
-fun runFrontEnd(source: AudioSource, limits: AudioLimits = AudioLimits(), isCancelled: () -> Boolean = { false }): FrontEnd =
+ *  analyse() computes features.extract and track_beats from the same samples. [onProgress] gets
+ *  the share of the file read so far. */
+fun runFrontEnd(
+    source: AudioSource,
+    limits: AudioLimits = AudioLimits(),
+    isCancelled: () -> Boolean = { false },
+    onProgress: (Double) -> Unit = {},
+): FrontEnd =
     NnlsChroma().use { nnls ->
         BeatTracker().use { tracker ->
-            val info = streamAudio(source, listOf(nnls, tracker), limits, isCancelled)
+            val info = streamAudio(source, listOf(nnls, tracker), limits, isCancelled, onProgress)
             val (onset, beats) = tracker.finish()
             FrontEnd(info, nnlsToCOrder(nnls.finish()), onset, beats)
         }
