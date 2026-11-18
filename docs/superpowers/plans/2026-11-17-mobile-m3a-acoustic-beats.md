@@ -29,7 +29,7 @@ Every Kotlin file and test in this plan ran in a scratch copy of the repository,
 
 librosa 1.0.1, which this plan pins, differs from 1.0.0 only in rounding inside `fft_frequencies` and `power_to_db`, both of which the port follows as 1.0.1 writes them. All beat-tracking code is identical between the two releases.
 
-For a 240 s song, two emulator runs of the benchmark gave 43.5–51.1 s for decoding, NNLS and beats, and 9.6–25.6 s for the model: the emulator's timings vary a lot from run to run. The emulator runs NNLS about ten times slower than the server, so whether this fits the 20 s budget waits for a phone (Task 6).
+For a 240 s song, four emulator runs of the benchmark gave 39.5–55.7 s for decoding, NNLS and beats, and 9.6–25.6 s for the model: the emulator's timings vary a lot from run to run. The emulator runs NNLS about ten times slower than the server, so whether this fits the 20 s budget waits for a phone (Task 6).
 
 ## File structure
 
@@ -308,6 +308,42 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+```
+
+Then bring the module docstring at the top of the file up to date. Replace
+```
+    python -m chordify_ai.export.mobile_goldens                 # every file
+```
+with
+```
+    python -m chordify_ai.export.mobile_goldens                 # every file this machine can write
+```
+and replace
+```
+    tools/mobile_goldens.sh                                     # features.json.gz (needs Docker)
+```
+with
+```
+    tools/mobile_goldens.sh                                     # features, beats, acoustic (needs Docker)
+```
+and replace
+```
+goldens/audio, is committed and only re-rendered on purpose (--render-audio).
+```
+with
+```
+goldens/audio, is committed: --render-audio writes the inputs that are missing, never the others.
+```
+and replace
+```
+features.json.gz needs the NNLS Chroma Vamp plugin, which tools/mobile_goldens.sh provides in
+a Linux container. Where the plugin is not installed, that file is skipped.
+```
+with
+```
+features.json.gz needs the NNLS Chroma Vamp plugin, and beats.json.gz and acoustic.json.gz the
+librosa and ONNX Runtime releases in PINNED. tools/mobile_goldens.sh provides all three in a Linux
+container; elsewhere a file that cannot be reproduced is skipped, and missing(name) says why.
 ```
 
 - [ ] **Step 5: Let the test skip what this machine cannot reproduce**
@@ -1224,9 +1260,10 @@ class AcousticGoldenTest {
     private val golden = Goldens.loadGz("acoustic")
 
     private fun repoFile(path: String): File {
-        var dir: File? = File(System.getProperty("user.dir")).absoluteFile
+        val start = File("").absoluteFile // the working directory: Gradle runs unit tests in the module
+        var dir: File? = start
         while (dir != null && !File(dir, path).exists()) dir = dir.parentFile
-        return File(dir ?: error("$path not found above ${System.getProperty("user.dir")}"), path)
+        return File(dir ?: error("$path not found above $start"), path)
     }
 
     private val bundleJson get() = repoFile("models/chordnet-chroma/3.0.0/bundle.json").readText()
@@ -1693,11 +1730,11 @@ cd Mobile
 ./gradlew :engine:api34DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.arbaba.chordifymobile.engine.features.FeatureBenchmarkDeviceTest
 grep -rh "ChordifyBenchmark" engine/build/outputs/androidTest-results/managedDevice
 ```
-Expected: `BUILD SUCCESSFUL`, and a line like `240 s song: decode + NNLS + beats … s, chord model … s, on sdk_gphone64_x86_64 (x86_64)`. While this plan was written two emulator runs gave 51.1 s and 25.6 s, then 43.5 s and 9.6 s. If a phone is connected, also run `./gradlew :engine:connectedDebugAndroidTest` and `adb logcat -d -s ChordifyBenchmark` for its line.
+Expected: `BUILD SUCCESSFUL`, and a line like `240 s song: decode + NNLS + beats … s, chord model … s, on sdk_gphone64_x86_64 (x86_64)`. While this plan was written and run, four emulator runs gave 39.5–55.7 s and 9.6–25.6 s. If a phone is connected, also run `./gradlew :engine:connectedDebugAndroidTest` and `adb logcat -d -s ChordifyBenchmark` for its line.
 
 - [ ] **Step 3: Record the numbers**
 
-In `docs/chord-progression-plan/08-implementation-status.md`, §3.6, directly below the table that M2 added (the one whose header row is `| Device | ABI | Decode + NNLS features |`), add:
+In `docs/chord-progression-plan/08-implementation-status.md`, §3.6, below M2's table and the paragraph after it (the one that ends `so it is to be profiled on a phone before being optimised.`), add:
 ```markdown
 
 With beat tracking and the chord model (milestone M3a), for a 240 s song, from the same test:
@@ -1707,7 +1744,7 @@ With beat tracking and the chord model (milestone M3a), for a 240 s song, from t
 | Emulator (API 34, Google APIs, 2 cores) on an Intel Core i7-9750H laptop | x86_64 | <Step 2's first number> s | <Step 2's second number> s |
 | <phone model, or "No phone measured yet"> | arm64-v8a | | |
 ```
-Fill the angle-bracketed cells from Step 2's output. The emulator runs NNLS about ten times slower than the server (§3.6 above), so these numbers say little about a phone.
+Fill the angle-bracketed cells from Step 2's output; with several runs, give the range and the number of runs, as M2's table does. Then add the line `The emulator's timings vary a lot between runs, and it runs NNLS about ten times slower than the server, so these numbers say little about a phone.` below the table.
 
 - [ ] **Step 4: Document beats and the model in the README**
 
