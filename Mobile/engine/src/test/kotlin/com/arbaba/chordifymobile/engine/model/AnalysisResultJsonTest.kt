@@ -20,7 +20,7 @@ class AnalysisResultJsonTest {
 
     @Test
     fun theServersResultsReadBackAsTheSameJson() {
-        assertEquals(10, results.size)
+        assertEquals(11, results.size)
         for ((name, json) in results) {
             val result = parseAnalysisResult(json.toString())
             assertJsonClose(name, json, Json.parseToJsonElement(result.toJson()), absolute = 0.0)

@@ -60,6 +60,8 @@ tools/mobile_goldens.sh                        # features, beats, acoustic and a
 ```
 
 `goldens/audio/` holds the audio inputs, rendered once (`tools/mobile_goldens.sh --render-audio`)
-and committed. `tests/ai/test_mobile_goldens.py` fails while the committed files are stale; it
+and committed. One is a real recording: 30 s of a GuitarSet take, an acoustic guitar through a
+microphone (CC BY 4.0, credited in [`goldens/audio/CREDITS.md`](src/test/resources/goldens/audio/CREDITS.md)),
+cut once with `--guitarset-take`. `tests/ai/test_mobile_goldens.py` fails while the committed files are stale; it
 checks `features.json.gz` where NNLS Chroma is installed, as in CI. Never edit the golden files
 by hand: when a Kotlin test disagrees, the Kotlin port is what needs fixing.

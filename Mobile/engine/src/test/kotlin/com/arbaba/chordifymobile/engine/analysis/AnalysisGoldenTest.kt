@@ -39,7 +39,7 @@ class AnalysisGoldenTest {
 
     @Test
     fun theFirstDecodingAndTheKeyMatchPython() {
-        assertEquals(6, analysed.size)
+        assertEquals(7, analysed.size)
         for (input in analysed) {
             val name = input.str("file")!!
             val (segments, estimate) = firstPass(JVM_MODELS, input.measurements())

@@ -28,7 +28,7 @@ class NnlsChromaDeviceTest {
     @Test
     fun bothchromaMatchesPythonForTheInputsAt44k() {
         val inputs = golden.objects("inputs").filter { it.int("sample_rate") == NNLS_BOTHCHROMA.sampleRate }
-        assertEquals(2, inputs.size)
+        assertEquals(3, inputs.size) // loop.wav, loop_padded.wav and the GuitarSet excerpt
         for (input in inputs) {
             val name = input.str("file")!!
             val frames = nnls(TestAudio.readWav(TestAudio.golden(name)).mono, chunk = 4096)

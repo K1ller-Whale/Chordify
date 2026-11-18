@@ -23,7 +23,7 @@ class BeatTrackerDeviceTest {
     @Test
     fun beatsMatchTheServer() {
         val inputs = Goldens.loadGz("beats").objects("inputs")
-        assertEquals(6, inputs.size)
+        assertEquals(7, inputs.size)
         for (input in inputs) {
             val name = input.str("file")!!
             val (onset, info) = BeatTracker().use { tracker ->

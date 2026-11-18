@@ -41,7 +41,7 @@ class FeaturesGoldenTest {
     @Test
     fun normalisationMatchesPython() {
         val inputs = golden.objects("inputs")
-        assertEquals(4, inputs.size)
+        assertEquals(5, inputs.size)
         for (input in inputs) {
             val name = input.str("file")!!
             val normalised = normaliseBothchroma(input.getValue("raw").floatMatrix())

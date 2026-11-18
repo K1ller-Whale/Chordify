@@ -20,7 +20,7 @@ class FeaturePipelineDeviceTest {
     @Test
     fun theFeaturesOfEveryInputMatchPython() {
         val inputs = Goldens.loadGz("features").objects("inputs")
-        assertEquals(4, inputs.size)
+        assertEquals(5, inputs.size)
         for (input in inputs) {
             val name = input.str("file")!!
             val features = extractNnlsBothchroma(AudioSource.FromFile(TestAudio.golden(name)))

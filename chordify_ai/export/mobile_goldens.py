@@ -393,6 +393,13 @@ WALTZ = [(label, 0.4) for label in ("C:maj", "G:maj", "A:min", "F:maj") * 2 for 
 # 16-bit WAV inputs, which every decoder reads exactly. Each one exercises one more step:
 # plain 44.1 kHz; digital silence at both ends; resampling down; stereo and resampling up.
 WAV_INPUTS = ["loop.wav", "loop_padded.wav", "loop_48k.wav", "sevenths_stereo_22k.wav"]
+# A real recording, which no render stands in for: the first 30 s of GuitarSet take
+# 00_Rock1-90-C#_comp, through the microphone (CC BY 4.0, credited in audio/CREDITS.md). It is cut
+# once from the take with --guitarset-take and committed; the inputs above come first in every list.
+GUITARSET_TAKE = "00_Rock1-90-C#_comp_mic.wav"
+GUITARSET_EXCERPT = "guitarset_rock1_comp.wav"
+GUITARSET_SECONDS = 30
+REAL_INPUTS = [GUITARSET_EXCERPT]
 # Lossy copies of loop.wav. Decoders differ, so only their timing is compared (spec §7.1).
 ENCODED_INPUTS = {"loop.mp3": ["-codec:a", "libmp3lame", "-b:a", "128k"],
                   "loop.m4a": ["-codec:a", "aac", "-b:a", "128k"]}
@@ -420,6 +427,24 @@ def envelope_offset_ms(reference: np.ndarray, other: np.ndarray, sr: int) -> flo
         if score > best_score:
             best, best_score = lag, score
     return best * hop / sr * 1000
+
+
+def cut_guitarset_excerpt(take: Path, audio_dir: Path = AUDIO_DIR) -> None:
+    """Write the GuitarSet excerpt from the take's mono microphone WAV (audio_mono-mic.zip on
+    Zenodo, record 3371780), unless it is already there: its first 30 s, samples unchanged."""
+    import wave
+
+    out = audio_dir / GUITARSET_EXCERPT
+    if out.exists():
+        return
+    with wave.open(str(take), "rb") as source:
+        assert (source.getnchannels(), source.getsampwidth(), source.getframerate()) == (1, 2, 44100), take
+        frames = source.readframes(GUITARSET_SECONDS * 44100)
+    with wave.open(str(out), "wb") as target:
+        target.setnchannels(1)
+        target.setsampwidth(2)
+        target.setframerate(44100)
+        target.writeframes(frames)
 
 
 def render_audio(audio_dir: Path = AUDIO_DIR) -> None:
@@ -488,7 +513,7 @@ def features_golden() -> dict:
         raise SystemExit("features.json.gz needs the NNLS Chroma Vamp plugin: run tools/mobile_goldens.sh")
     spec = features.NNLS_BOTHCHROMA
     inputs = []
-    for name in WAV_INPUTS:
+    for name in WAV_INPUTS + REAL_INPUTS:
         path = AUDIO_DIR / name
         native, sr = sf.read(str(path), dtype="float32", always_2d=False)
         mono = audio.to_mono(native)
@@ -524,7 +549,7 @@ def features_golden() -> dict:
 # beats: librosa's onset strength and dynamic-programming beat tracker
 # ---------------------------------------------------------------------------
 
-BEAT_INPUTS = WAV_INPUTS + ["pulse.wav", "waltz.wav"]
+BEAT_INPUTS = WAV_INPUTS + ["pulse.wav", "waltz.wav"] + REAL_INPUTS
 BEAT_SR = 22050  # chordify_backend.app.pipeline.beats.track_beats resamples to this, hop 512
 BEAT_HOP = 512
 ONSET_CASE_SECONDS = 2.0
@@ -778,7 +803,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--only", choices=sorted(FILES), action="append")
     parser.add_argument("--render-audio", action="store_true",
                         help=f"render the audio inputs missing from {AUDIO_DIR} first")
+    parser.add_argument("--guitarset-take", metavar="WAV",
+                        help=f"cut {GUITARSET_EXCERPT} from {GUITARSET_TAKE} if it is missing")
     args = parser.parse_args(argv)
+    if args.guitarset_take:
+        cut_guitarset_excerpt(Path(args.guitarset_take))
     if args.render_audio:
         render_audio()
     out = Path(args.out)
