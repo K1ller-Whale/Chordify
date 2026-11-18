@@ -62,10 +62,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Engine tests
         run: ./gradlew :engine:testDebugUnitTest
+      - name: App tests
+        run: ./gradlew :app:testDebugUnitTest
 
   android-device:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: Mobile
@@ -83,3 +85,5 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Engine device tests (x86_64 emulator)
         run: ./gradlew :engine:api34DebugAndroidTest -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
+      - name: App device tests (x86_64 emulator)
+        run: ./gradlew :app:api34DebugAndroidTest -Pandroid.testoptions.manageddevices.emulator.gpu=swiftshader_indirect
