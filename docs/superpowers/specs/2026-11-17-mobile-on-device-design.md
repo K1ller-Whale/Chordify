@@ -50,7 +50,7 @@ Out of scope:
 ## 4. Structure
 
 `Mobile/` becomes a Gradle project with two modules. The package name
-`com.arbaba.chordifymobile` stays, so the new app installs over the old one. `minSdk` stays 33.
+`com.arbaba.chordifymobile` stays, so the new app installs over the old one. `minSdk` is 30 (Android 11), lowered from the old app's 33 so the app runs on older phones.
 
 ### 4.1 `:engine` (Android library, no UI)
 
@@ -149,7 +149,7 @@ Recording: `AudioRecord`, 44.1 kHz, 16-bit mono, `UNPROCESSED` source where supp
 recording, after a confirmation.
 
 Analyses run one at a time as WorkManager jobs in a foreground service with a progress
-notification (`dataSync` type on Android 13 and 14, `mediaProcessing` from Android 15).
+notification (`dataSync` type up to Android 14, `mediaProcessing` from Android 15).
 Progress is written to Room and observed by the screens. Cancel stops the job. WorkManager
 restarts a job killed with the process. The engine loads its models once per process, on
 first use.

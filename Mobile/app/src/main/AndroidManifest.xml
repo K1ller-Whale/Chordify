@@ -41,7 +41,7 @@
             </intent-filter>
         </activity>
 
-        <!-- The analysis job's foreground service: dataSync on Android 13 and 14, mediaProcessing from 15. -->
+        <!-- The analysis job's foreground service: dataSync up to Android 14, mediaProcessing from 15. -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync|mediaProcessing"

@@ -93,7 +93,7 @@ class AnalysisScreenTest {
         compose.onNodeWithText("4 chords").assertIsDisplayed()
         compose.onNodeWithTag("nowName").assertTextEquals("C")
         compose.onNodeWithText("· Tonic in C major").assertIsDisplayed()
-        compose.onNodeWithText(loop.chords[0].next[0].reason, substring = true).assertIsDisplayed()
+        compose.onNodeWithText(loop.chords[0].next[0].reason, substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("time").assertTextEquals("0:00 / 0:08")
     }
 
@@ -127,9 +127,9 @@ class AnalysisScreenTest {
     @Test
     fun aMissingFileCanBePickedAgain() {
         show(audio = AudioFile.MISSING, mismatch = true)
-        compose.onNodeWithText(FILE_MISSING).assertIsDisplayed()
-        compose.onNodeWithText(FILE_MISMATCH).assertIsDisplayed()
-        compose.onNodeWithText("Pick the file").performClick()
+        compose.onNodeWithText(FILE_MISSING).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(FILE_MISMATCH).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Pick the file").performScrollTo().performClick()
         assertEquals(listOf("pick"), events)
     }
 

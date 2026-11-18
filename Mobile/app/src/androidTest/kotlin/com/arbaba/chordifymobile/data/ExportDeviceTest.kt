@@ -2,6 +2,7 @@ package com.arbaba.chordifymobile.data
 
 import android.content.Intent
 import android.net.Uri
+import androidx.core.content.IntentCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
@@ -32,9 +33,9 @@ class ExportDeviceTest {
             val file = exportFile(context, "loop.wav", loop, format)
             assertEquals("loop.${format.extension}", file.name)
             val chooser = shareIntent(context, file, format)
-            val send = chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
+            val send = IntentCompat.getParcelableExtra(chooser, Intent.EXTRA_INTENT, Intent::class.java)!!
             assertEquals(format.mimeType, send.type)
-            val uri = send.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)!!
+            val uri = IntentCompat.getParcelableExtra(send, Intent.EXTRA_STREAM, Uri::class.java)!!
             assertEquals("content", uri.scheme)
             val text = context.contentResolver.openInputStream(uri)!!.use { it.readBytes().decodeToString() }
             assertEquals(if (format == ExportFormat.LAB) labText(loop) else jsonText(loop), text)
