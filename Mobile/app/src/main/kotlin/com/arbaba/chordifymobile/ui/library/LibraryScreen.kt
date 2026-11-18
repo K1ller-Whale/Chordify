@@ -83,6 +83,11 @@ fun LibraryScreen(onOpen: (String) -> Unit, model: LibraryViewModel = viewModel(
             askForNotifications()
         }
     }
+    // Files passed between phones do not always keep their type, so the picker offers a little more;
+    // the import refuses anything that is not an analysis.
+    val importAnalysis = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) model.importAnalysis(uri)
+    }
     val microphone = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         microphoneRefused = !granted
         if (granted) model.startRecording()
@@ -119,6 +124,7 @@ fun LibraryScreen(onOpen: (String) -> Unit, model: LibraryViewModel = viewModel(
         onRetry = { model.retry(it) },
         onDelete = { model.delete(it) },
         onOpen = onOpen,
+        onImportAnalysis = { importAnalysis.launch(arrayOf("application/json", "application/octet-stream", "text/plain")) },
     )
 }
 
@@ -140,6 +146,7 @@ fun LibraryContent(
     onRetry: (String) -> Unit,
     onDelete: (String) -> Unit,
     onOpen: (String) -> Unit,
+    onImportAnalysis: () -> Unit = {},
 ) {
     var confirmDelete by remember { mutableStateOf<Analysis?>(null) }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
@@ -154,6 +161,8 @@ fun LibraryContent(
                     Text(if (recordingSeconds == null) "Record" else "Stop and analyse (${formatTime(recordingSeconds)})")
                 }
             }
+            // An analysis exported as .json on another phone or by the web app; it comes without its audio.
+            TextButton(onClick = onImportAnalysis, enabled = recordingSeconds == null) { Text("Import an analysis (.json)") }
         }
         item {
             // The whole row toggles, so a screen reader reads the switch with its label.

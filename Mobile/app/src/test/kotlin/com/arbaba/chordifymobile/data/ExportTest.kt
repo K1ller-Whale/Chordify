@@ -7,6 +7,9 @@ import com.arbaba.chordifymobile.music.WebGoldens
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ExportTest {
@@ -31,6 +34,19 @@ class ExportTest {
     @Test
     fun theJsonFileIsTheResultDocument() {
         assertEquals(loop, parseAnalysisResult(jsonText(loop)))
+    }
+
+    @Test
+    fun aJsonExportReadsBackAndAnythingElseIsRefused() {
+        assertEquals(loop, parseExport(jsonText(loop)))
+        for (text in listOf(labText(loop), "", "{}", "not json", jsonText(loop.copy(status = "failed")), jsonText(loop.copy(chords = emptyList())))) {
+            val error = assertThrows(IllegalArgumentException::class.java) { parseExport(text) }
+            assertEquals(NOT_AN_EXPORT, error.message)
+        }
+        assertTrue(isAnalysisExport("application/json", null))
+        assertTrue(isAnalysisExport("application/octet-stream", "My song.JSON"))
+        assertFalse(isAnalysisExport("audio/mpeg", "song.mp3"))
+        assertFalse(isAnalysisExport(null, "song.lab"))
     }
 
     @Test

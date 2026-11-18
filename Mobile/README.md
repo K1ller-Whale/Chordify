@@ -9,8 +9,10 @@ network access. Design:
 - `app/` is the Compose app over it. `data/` keeps the library: one Room row per analysis in
   `library.db`, the result documents in `files/results/`, the app's recordings in
   `files/recordings/`, and copies of shared files it cannot keep a permission for in
-  `files/imports/`. `work/` runs each analysis as a WorkManager job, one at a time, as a
-  foreground service with a progress notification. `record/` records from the microphone.
+  `files/imports/`. An analysis exported as `.json`, on another phone or by the web app, can be
+  imported: it arrives without its audio, which the analysis screen asks for. `work/` runs each
+  analysis as a WorkManager job, one at a time, as a foreground service with a progress
+  notification. `record/` records from the microphone.
   `music/` ports the web app's `music.ts` and `capo.ts` (chord names, guitar shapes, capo).
   `playback/` plays the analysed file with Media3 under one playback clock and makes its
   waveform. `quick/` is Quick chord, `songwriter/` the Songwriter, and `ui/` holds the other

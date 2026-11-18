@@ -54,6 +54,17 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    /** "Import an analysis": a .json export from another phone or the web app. */
+    fun importAnalysis(uri: Uri) {
+        viewModelScope.launch {
+            try {
+                library.importAnalysis(uri)
+            } catch (error: Exception) {
+                message.value = "Could not import this file: ${error.message}"
+            }
+        }
+    }
+
     /** Starts recording; call only with the microphone permission granted. */
     @SuppressLint("MissingPermission")
     fun startRecording() {

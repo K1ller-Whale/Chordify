@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import androidx.core.content.FileProvider
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
+import com.arbaba.chordifymobile.engine.model.parseAnalysisResult
 import com.arbaba.chordifymobile.engine.model.toJson
 import java.io.File
 import java.math.BigDecimal
@@ -32,6 +33,25 @@ fun exportName(displayName: String, format: ExportFormat): String {
     val base = displayName.substringBeforeLast('.').replace(Regex("[\\\\/:*?\"<>|]"), "_").ifBlank { "analysis" }
     return "$base.${format.extension}"
 }
+
+/** What an import says when the file is not an analysis. */
+const val NOT_AN_EXPORT = "This file is not an analysis exported by Chordify (.json)."
+
+/** The analysis in a .json export, from this app, another phone or the web app; a .lab file, or
+ *  anything else, is refused with [NOT_AN_EXPORT]. */
+fun parseExport(text: String): AnalysisResult {
+    val result = try {
+        parseAnalysisResult(text)
+    } catch (_: Exception) {
+        throw IllegalArgumentException(NOT_AN_EXPORT)
+    }
+    require(result.status == "completed" && result.chords.isNotEmpty()) { NOT_AN_EXPORT }
+    return result
+}
+
+/** Whether a shared or picked file is a .json export rather than audio. */
+fun isAnalysisExport(mimeType: String?, name: String?): Boolean =
+    mimeType == ExportFormat.JSON.mimeType || name?.endsWith(".json", ignoreCase = true) == true
 
 /** Writes the export into the app's cache, where the share sheet can read it. */
 fun exportFile(context: Context, displayName: String, result: AnalysisResult, format: ExportFormat): File {

@@ -34,7 +34,7 @@ class LibraryScreenTest {
                                onMajorMinorOnly = { events += "majorMinorOnly=$it" }, onDismissMessage = { events += "dismiss" },
                                onOpenAppSettings = null, onCancel = { events += "cancel $it" },
                                onRetry = { events += "retry $it" }, onDelete = { events += "delete $it" },
-                               onOpen = { events += "open $it" })
+                               onOpen = { events += "open $it" }, onImportAnalysis = { events += "import" })
             }
         }
     }
@@ -85,5 +85,12 @@ class LibraryScreenTest {
         compose.onNodeWithText("Delete this analysis?").assertIsDisplayed()
         compose.onNodeWithTag("confirmDelete").performClick()
         assertEquals(listOf("delete song", "delete take"), events)
+    }
+
+    @Test
+    fun anAnalysisCanBeImported() {
+        show(emptyList())
+        compose.onNodeWithText("Import an analysis (.json)").performClick()
+        assertEquals(listOf("import"), events)
     }
 }

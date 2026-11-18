@@ -30,6 +30,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.arbaba.chordifymobile.data.Settings
+import com.arbaba.chordifymobile.data.isAnalysisExport
 import com.arbaba.chordifymobile.quick.QuickChordScreen
 import com.arbaba.chordifymobile.songwriter.SongwriterScreen
 import com.arbaba.chordifymobile.ui.ChordifyTheme
@@ -53,13 +54,19 @@ class MainActivity : ComponentActivity() {
         importShared(intent)
     }
 
-    /** "Share to" (ACTION_SEND) and "Open with" (ACTION_VIEW) an audio file: add it to the library. */
+    /** "Share to" (ACTION_SEND) and "Open with" (ACTION_VIEW): an audio file is analysed, a .json
+     *  export is added as it is. */
     private fun importShared(intent: Intent) {
-        val uri = sharedAudio(intent) ?: return
+        val uri = sharedFile(intent) ?: return
         val container = (application as ChordifyApp).container
         lifecycleScope.launch {
             try {
-                container.library.import(uri, Settings.options(container.settings.majorMinorOnly.first()))
+                if (isAnalysisExport(intent.type ?: contentResolver.getType(uri), uri.lastPathSegment)) {
+                    container.library.importAnalysis(uri)
+                    Toast.makeText(this@MainActivity, "The analysis is in the Library.", Toast.LENGTH_SHORT).show()
+                } else {
+                    container.library.import(uri, Settings.options(container.settings.majorMinorOnly.first()))
+                }
             } catch (error: Exception) {
                 Toast.makeText(this@MainActivity, "Could not read this file: ${error.message}", Toast.LENGTH_LONG).show()
             }
@@ -67,8 +74,8 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
-        /** The audio file an intent hands the app, if it is a share or an "open with". */
-        fun sharedAudio(intent: Intent): Uri? = when (intent.action) {
+        /** The file an intent hands the app, if it is a share or an "open with". */
+        fun sharedFile(intent: Intent): Uri? = when (intent.action) {
             Intent.ACTION_SEND -> IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
             Intent.ACTION_VIEW -> intent.data
             else -> null

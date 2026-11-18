@@ -165,7 +165,10 @@ Bottom navigation: Library, Quick chord, Songwriter, Settings. The analysis scre
 the Library; About opens from Settings.
 
 **Library**: "Pick a file", "Record" (with timer), "Major and minor only" switch, list of
-analyses with progress or error, swipe to delete.
+analyses with progress or error, swipe to delete. "Import an analysis (.json)" adds an analysis
+exported on another phone or by the web app, as does opening or sharing a `.json` export with the
+app. It arrives without its audio: the analysis screen asks for the song, checked by the SHA-256
+the export records.
 
 **Analysis**, portrait:
 

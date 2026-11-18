@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
@@ -66,7 +67,7 @@ class Library(
      *  the file that was analysed (the same SHA-256); a different file is kept too, with a warning. */
     suspend fun attach(id: String, uri: Uri): Boolean = withContext(Dispatchers.IO) {
         val row = dao.get(id) ?: return@withContext false
-        val same = sha256(uri) == row.sha256
+        val same = row.sha256.isEmpty() || sha256(uri) == row.sha256 // an export may not record it
         val (fileUri, owns) = keep(uri, id, displayNameOf(uri))
         if (row.ownsFile && row.fileUri != fileUri.toString()) Uri.parse(row.fileUri).path?.let { File(it).delete() }
         peaksFile(id).delete() // the waveform is the new file's
@@ -85,6 +86,35 @@ class Library(
         add(Analysis(id, name, fileUri.toString(), owns, sha256, clock(), modelFingerprint = fingerprint,
                      vocabulary = options.vocabulary, predictions = options.predictions,
                      minSegmentBeats = options.minSegmentBeats))
+        id
+    }
+
+    /** Adds an analysis exported as .json, on another phone or by the web app, as a completed row
+     *  without its audio: the analysis screen asks for the song and checks it by the SHA-256 the
+     *  export records. It is never reused for a new analysis, which the shipped models may make
+     *  differently. Returns the new row's id. */
+    suspend fun importAnalysis(uri: Uri): String = withContext(Dispatchers.IO) {
+        val text = open(uri).use { input ->
+            val out = ByteArrayOutputStream()
+            val buffer = ByteArray(1 shl 16)
+            while (true) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                out.write(buffer, 0, n)
+                require(out.size() <= MAX_EXPORT_BYTES) { NOT_AN_EXPORT }
+            }
+            out.toString(Charsets.UTF_8.name())
+        }
+        val result = parseExport(text)
+        val id = newId()
+        resultsDir.mkdirs()
+        resultFile(id).writeText(result.toJson())
+        val key = result.key.global
+        val name = result.source.title ?: result.source.filename ?: displayNameOf(uri).removeSuffix(".json")
+        dao.upsert(Analysis(id, name, fileUri = "", ownsFile = false, sha256 = result.source.sha256.orEmpty(),
+                            createdAt = clock(), status = Status.COMPLETED, stage = "done", progress = 1.0,
+                            modelFingerprint = IMPORTED, duration = result.source.duration,
+                            keyName = "${key.tonic} ${key.mode}", bpm = result.tempo.bpm))
         id
     }
 
@@ -217,4 +247,12 @@ class Library(
         resolver.openInputStream(uri) ?: throw java.io.FileNotFoundException("Cannot read $uri")
 
     private fun newId() = "an_${UUID.randomUUID().toString().replace("-", "").take(20)}"
+
+    companion object {
+        /** The model fingerprint of an imported analysis, which matches no analysis the app makes. */
+        const val IMPORTED = "imported"
+
+        /** The largest .json export read: a 15-minute song's is about 2 MB. */
+        const val MAX_EXPORT_BYTES = 32 shl 20
+    }
 }

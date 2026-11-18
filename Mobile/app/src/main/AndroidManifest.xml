@@ -39,6 +39,17 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:scheme="content" android:mimeType="audio/*" />
             </intent-filter>
+            <!-- An analysis exported as .json, from another phone or the web app -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/json" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" android:mimeType="application/json" />
+            </intent-filter>
         </activity>
 
         <!-- The analysis job's foreground service: dataSync up to Android 14, mediaProcessing from 15. -->

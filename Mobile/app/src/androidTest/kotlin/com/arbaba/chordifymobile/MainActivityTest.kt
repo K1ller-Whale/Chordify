@@ -37,8 +37,8 @@ class MainActivityTest {
     @Test
     fun sharedAndOpenedAudioIsFound() {
         val song = Uri.parse("content://media/external/audio/media/42")
-        assertEquals(song, MainActivity.sharedAudio(Intent(Intent.ACTION_SEND).setType("audio/mpeg").putExtra(Intent.EXTRA_STREAM, song)))
-        assertEquals(song, MainActivity.sharedAudio(Intent(Intent.ACTION_VIEW).setDataAndType(song, "audio/mpeg")))
-        assertNull(MainActivity.sharedAudio(Intent(Intent.ACTION_MAIN)))
+        assertEquals(song, MainActivity.sharedFile(Intent(Intent.ACTION_SEND).setType("audio/mpeg").putExtra(Intent.EXTRA_STREAM, song)))
+        assertEquals(song, MainActivity.sharedFile(Intent(Intent.ACTION_VIEW).setDataAndType(song, "audio/mpeg")))
+        assertNull(MainActivity.sharedFile(Intent(Intent.ACTION_MAIN)))
     }
 }
