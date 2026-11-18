@@ -725,6 +725,7 @@ def analysis_golden() -> dict:
         except ApiError as err:
             suggestions.append({"request": body, "error": {"code": err.code, "message": err.detail}})
     return {"environment": _environment() | {"onnxruntime": _version("onnxruntime")}, "models": models.ids,
+            "fingerprint": models.fingerprint,
             "sample_rate": ANALYSIS_SR, "analysis_id": ANALYSIS_ID, "inputs": inputs, "replays": replays,
             "quick_chord": quick, "next_chords": suggestions}
 
