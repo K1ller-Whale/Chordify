@@ -17,6 +17,12 @@ once into both NNLS Chroma and the beat tracker. The model files are not in `src
 `chordnet-chroma/3.0.0` and `progression-ngram/1.0.0` from the repository's `models/` into the
 assets at build time, so git holds one copy of each.
 
+`ChordifyEngine` is the API the app calls: `analyse` returns the whole analysis document
+(`model.AnalysisResult`, the JSON the server's analysis job writes), `nextChords` the
+Songwriter's suggestions, and `quickChord` the one chord in a short clip. `analysis/` ports the
+server's pipeline after the audio stages. `analysis.analyseMeasured` runs it from recorded beats
+and model output, which is how the JVM tests check it against the server's own numbers.
+
 ## Native code
 
 `src/main/cpp/` builds `libchordify_engine.so` for arm64-v8a and x86_64 (NDK 27.0, CMake 3.22.1):
@@ -50,7 +56,7 @@ the repository root and commit them with the change:
 
 ```bash
 python -m chordify_ai.export.mobile_goldens   # vocab, theory, lm, decode
-tools/mobile_goldens.sh                        # features, beats and acoustic, in Docker with the pinned reference
+tools/mobile_goldens.sh                        # features, beats, acoustic and analysis, in Docker with the pinned reference
 ```
 
 `goldens/audio/` holds the audio inputs, rendered once (`tools/mobile_goldens.sh --render-audio`)

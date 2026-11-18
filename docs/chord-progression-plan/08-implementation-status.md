@@ -216,6 +216,15 @@ With beat tracking and the chord model (milestone M3a), for a 240 s song, from t
 
 The emulator's timings vary a lot between runs, and it runs NNLS about ten times slower than the server, so these numbers say little about a phone.
 
+The whole analysis (milestone M3b), for a 240 s song: `ChordifyEngine.analyse`, timed stage by stage by the same test:
+
+| Device | ABI | Decode + NNLS + beats | Chord model | The rest | In all |
+|---|---|---|---|---|---|
+| Emulator (API 34, Google APIs, 2 cores) on an Intel Core i7-9750H laptop | x86_64 | 14.9–55.2 s (three runs) | 3.9–17.8 s (three runs) | 1.2–5.1 s (three runs) | 20.1–78.1 s (three runs) |
+| No phone measured yet | arm64-v8a | | | | |
+
+"The rest" covers both decodings, the key, theory and predictions: everything the server's `analyse()` does after the chord model.
+
 ## 4. Where the build differs from the plan
 
 | Plan | Built | Why | Revisit when |
