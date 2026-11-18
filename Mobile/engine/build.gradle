@@ -55,6 +55,18 @@ android {
     }
 }
 
+// The models live once in git, in the repository's models/ folder; the engine's assets get a copy
+// of the two it runs, made at build time.
+def modelAssets = layout.buildDirectory.dir('generated/modelAssets').get().asFile
+def copyModels = tasks.register('copyModels', Copy) {
+    from(rootProject.file('../models')) {
+        include 'chordnet-chroma/3.0.0/**', 'progression-ngram/1.0.0/**'
+    }
+    into new File(modelAssets, 'models')
+}
+android.sourceSets.main.assets.srcDir(modelAssets)
+tasks.named('preBuild') { dependsOn copyModels }
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
@@ -63,6 +75,7 @@ kotlin {
 
 dependencies {
     implementation libs.kotlinx.serialization.json
+    implementation libs.onnxruntime.android
     testImplementation libs.junit
     androidTestImplementation libs.junit
     androidTestImplementation libs.ext.junit
