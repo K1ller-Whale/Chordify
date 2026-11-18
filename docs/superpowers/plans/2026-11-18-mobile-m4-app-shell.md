@@ -91,7 +91,7 @@ Expected:
 - `git status` lists only `mobile_goldens.py` and `analysis.json.gz`;
 - `python -c "from chordify_ai.export import mobile_goldens as g; print(g.read_golden(g.DEFAULT_OUT, 'analysis')['fingerprint'])"` prints `517393fe4cb3120c`.
 
-Then quit Docker Desktop (`docker desktop stop`, or from its tray icon if that times out).
+Then quit Docker Desktop: `docker desktop stop`, or from its tray icon if that times out (it did, twice, while this plan was run).
 
 - [ ] **Step 2: Write the failing test**
 
@@ -393,7 +393,7 @@ dependencies {
 - [ ] **Step 4: Run it to make sure it fails**
 
 Run: `cd Mobile && ./gradlew :app:compileDebugAndroidTestKotlin`
-Expected: the build resolves the new dependencies, then compilation fails with `Unresolved reference 'MainActivity'`.
+Expected: the build resolves the new dependencies, then fails in `:app:processDebugResources` with `resource style/Theme.Material3.DayNight.NoActionBar ... not found`. The old themes still name the Material Components theme, whose library the new build no longer includes, and Step 5 replaces them.
 
 - [ ] **Step 5: Write the theme, resources and activity**
 
@@ -2443,7 +2443,7 @@ In the `android-device` job:
 - [ ] **Step 2: Say how to build and test**
 
 Create `Mobile/README.md`:
-```markdown
+````markdown
 # Chordify Mobile
 
 The Android app: every feature of the web app, with the analysis running on the phone and no
@@ -2472,7 +2472,7 @@ The engine's own tests are in [`engine/README.md`](engine/README.md). Gradle 8.1
 17 or 21. The device tests use the Gradle-managed emulator (Pixel 6, API 34, Google APIs,
 x86_64). They analyse the engine's golden audio inputs through the app's own library, database
 and WorkManager, so a song is analysed end to end exactly as when the app picks it.
-```
+````
 
 - [ ] **Step 3: Run everything once more**
 
