@@ -41,6 +41,32 @@ class Library(
 
     suspend fun get(id: String): Analysis? = dao.get(id)
 
+    fun observe(id: String): Flow<Analysis?> = dao.observe(id)
+
+    /** The capo the analysis screen shows it with (spec §6.1). */
+    suspend fun setCapo(id: String, capo: Int) = dao.setCapo(id, capo)
+
+    /** Whether the analysed file can still be read where it was. */
+    suspend fun isReadable(analysis: Analysis): Boolean = withContext(Dispatchers.IO) {
+        try {
+            open(Uri.parse(analysis.fileUri)).close()
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Points the analysis at [uri] after its file went missing (spec §8). Returns whether it is
+     *  the file that was analysed (the same SHA-256); a different file is kept too, with a warning. */
+    suspend fun attach(id: String, uri: Uri): Boolean = withContext(Dispatchers.IO) {
+        val row = dao.get(id) ?: return@withContext false
+        val same = sha256(uri) == row.sha256
+        val (fileUri, owns) = keep(uri, id, displayNameOf(uri))
+        if (row.ownsFile && row.fileUri != fileUri.toString()) Uri.parse(row.fileUri).path?.let { File(it).delete() }
+        dao.setFile(id, fileUri.toString(), owns)
+        same
+    }
+
     /** Adds the audio at [uri] and starts its analysis; returns the analysis id. An earlier,
      *  completed analysis of the same file with the same models and options is reused. */
     suspend fun import(uri: Uri, options: AnalysisOptions, displayName: String? = null): String = withContext(Dispatchers.IO) {

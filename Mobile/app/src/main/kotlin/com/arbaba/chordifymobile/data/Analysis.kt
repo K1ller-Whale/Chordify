@@ -57,6 +57,9 @@ interface AnalysisDao {
     @Query("SELECT * FROM analyses WHERE id = :id")
     suspend fun get(id: String): Analysis?
 
+    @Query("SELECT * FROM analyses WHERE id = :id")
+    fun observe(id: String): Flow<Analysis?>
+
     /** A finished analysis of the same file with the same models and options, whose result can be reused. */
     @Query("""SELECT * FROM analyses WHERE sha256 = :sha256 AND modelFingerprint = :fingerprint
               AND vocabulary IS :vocabulary AND predictions = :predictions AND minSegmentBeats = :minSegmentBeats
@@ -82,6 +85,12 @@ interface AnalysisDao {
 
     @Query("UPDATE analyses SET status = 'cancelled' WHERE id = :id AND status IN ('queued', 'running')")
     suspend fun setCancelled(id: String)
+
+    @Query("UPDATE analyses SET capo = :capo WHERE id = :id")
+    suspend fun setCapo(id: String, capo: Int)
+
+    @Query("UPDATE analyses SET fileUri = :fileUri, ownsFile = :ownsFile WHERE id = :id")
+    suspend fun setFile(id: String, fileUri: String, ownsFile: Boolean)
 
     @Query("DELETE FROM analyses WHERE id = :id")
     suspend fun delete(id: String)
