@@ -40,12 +40,20 @@ import kotlin.math.roundToInt
 /** The engine, loaded once per process on first use, and the lock that runs one analysis at a time. */
 class EngineHolder(private val context: Context) {
     private val lock = Mutex()
-    private var engine: ChordifyEngine? = null
+    private val loading = Mutex()
+    @Volatile private var engine: ChordifyEngine? = null
 
-    suspend fun <T> withEngine(block: suspend (ChordifyEngine) -> T): T = lock.withLock {
-        val loaded = engine ?: withContext(Dispatchers.Default) { ChordifyEngine.fromAssets(context) }.also { engine = it }
-        block(loaded)
+    private suspend fun load(): ChordifyEngine = engine ?: loading.withLock {
+        engine ?: withContext(Dispatchers.Default) { ChordifyEngine.fromAssets(context) }.also { engine = it }
     }
+
+    /** Runs [block] with the engine, one analysis at a time. */
+    suspend fun <T> withEngine(block: suspend (ChordifyEngine) -> T): T = lock.withLock { block(load()) }
+
+    /** The engine for Quick chord and the Songwriter, which need not wait for a running analysis:
+     *  ONNX Runtime sessions may run from several threads, the chord model allocates per call, and
+     *  the progression model is only read. */
+    suspend fun concurrent(): ChordifyEngine = load()
 }
 
 /** One analysis as a WorkManager job (spec §6.1): queued jobs wait for the engine, the running one
