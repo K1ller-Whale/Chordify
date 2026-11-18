@@ -1,21 +1,28 @@
 package com.arbaba.chordifymobile.ui.analysis
 
 import android.app.Application
+import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.arbaba.chordifymobile.ChordifyApp
 import com.arbaba.chordifymobile.data.Analysis
+import com.arbaba.chordifymobile.data.ExportFormat
+import com.arbaba.chordifymobile.data.exportFile
+import com.arbaba.chordifymobile.data.shareIntent
 import com.arbaba.chordifymobile.data.Status
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
 import com.arbaba.chordifymobile.music.Notation
 import com.arbaba.chordifymobile.playback.ExoAudioPlayer
 import com.arbaba.chordifymobile.playback.PlaybackClock
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Whether the analysed audio can be played: still being checked, playable, or gone. */
 enum class AudioFile { CHECKING, PLAYABLE, MISSING }
@@ -28,6 +35,10 @@ class AnalysisViewModel(application: Application, private val id: String) : Andr
     val notation = MutableStateFlow(Notation.LETTERS)
     val audio = MutableStateFlow(AudioFile.CHECKING)
     val mismatch = MutableStateFlow(false)
+
+    /** The waveform of the file that plays, once it is made (null while it is, or without a file). */
+    val peaks = MutableStateFlow<FloatArray?>(null)
+    private var peaksJob: Job? = null
 
     /** The clock of the completed result, made once it is loaded. */
     var clock: PlaybackClock? = null
@@ -63,6 +74,18 @@ class AnalysisViewModel(application: Application, private val id: String) : Andr
         player?.release()
         player = if (playable) ExoAudioPlayer(getApplication(), Uri.parse(row.fileUri)) else null
         clock?.attach(player)
+        peaksJob?.cancel()
+        peaks.value = null
+        val duration = result.value?.source?.duration
+        if (playable && duration != null) peaksJob = viewModelScope.launch { peaks.value = library.peaks(row, duration) }
+    }
+
+    /** Writes the export and hands the share sheet to [open] (spec §6.2). */
+    fun export(format: ExportFormat, open: (Intent) -> Unit) = viewModelScope.launch {
+        val row = analysis.value ?: return@launch
+        val analysed = result.value ?: return@launch
+        val app = getApplication<Application>()
+        open(withContext(Dispatchers.IO) { shareIntent(app, exportFile(app, row.displayName, analysed, format), format) })
     }
 
     override fun onCleared() {
