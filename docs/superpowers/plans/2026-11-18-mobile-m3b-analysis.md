@@ -28,7 +28,7 @@
 Every Kotlin file and test in this plan ran in a scratch copy of the repository, against an `analysis.json.gz` that the plan's own generator wrote in the Docker container:
 - 73 JVM tests passed. On the first run, the six results and the four option replays matched the server's to 1e-9, along with the silent input's `NO_MUSIC_DETECTED` message, the next-chord responses and errors, and Quick chord.
 - 28 device tests passed on the managed emulator. From each WAV file, the whole `AnalysisResult` matched the server's within 2e-3.
-- On a 240 s song, one emulator run of the whole analysis took 20.1 s: 14.9 s decoding, NNLS and beats, 4.0 s the chord model, 1.2 s the rest. The emulator's timings vary a lot from run to run, so the budget still waits for a phone.
+- On a 240 s song, three emulator runs of the whole analysis took 20.1–78.1 s in all: 14.9–55.2 s decoding, NNLS and beats, 3.9–17.8 s the chord model, 1.2–5.1 s the rest. The emulator's timings vary a lot from run to run, so the budget still waits for a phone.
 
 The first device run failed: the Android build had stored `model.json.gz` as `model.json`. `ChordifyEngine.fromAssets` now opens that name (Task 5).
 
@@ -326,7 +326,7 @@ Expected:
 - `features.json.gz`, `beats.json.gz` and `acoustic.json.gz` come out byte-identical, so `git status` does not list them;
 - pytest says `8 passed`.
 
-Then run `docker desktop stop`.
+Then run `docker desktop stop`. If it times out, Docker Desktop is still running: quit it from its tray icon.
 
 - [ ] **Step 7: Check what was written**
 
@@ -485,7 +485,7 @@ class AnalysisResultJsonTest {
 - [ ] **Step 2: Run it to make sure it fails**
 
 Run: `cd Mobile && ./gradlew :engine:testDebugUnitTest --tests 'com.arbaba.chordifymobile.engine.model.AnalysisResultJsonTest'`
-Expected: compilation fails with `Unresolved reference 'parseAnalysisResult'` (and `toJson`, `ServerJson`, `ProgressionResponse`, `ChordSegment`).
+Expected: compilation fails with `Unresolved reference 'parseAnalysisResult'` (and `ServerJson`, `ProgressionResponse`, `ChordSegment`).
 
 - [ ] **Step 3: Add the serialization compiler plugin**
 
@@ -1797,7 +1797,7 @@ cd Mobile
 ./gradlew :engine:api34DebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.arbaba.chordifymobile.engine.features.FeatureBenchmarkDeviceTest
 grep -rh "ChordifyBenchmark" engine/build/outputs/androidTest-results/managedDevice
 ```
-Expected: `BUILD SUCCESSFUL`, and a line like `240 s song: decode + NNLS + beats … s, chord model … s, the rest … s, in all … s, on sdk_gphone64_x86_64 (x86_64)`. While this plan was written, the emulator gave 14.9 s, 4.0 s, 1.2 s and 20.1 s. If a phone is connected, also run `./gradlew :engine:connectedDebugAndroidTest` and `adb logcat -d -s ChordifyBenchmark` for its line.
+Expected: `BUILD SUCCESSFUL`, and a line like `240 s song: decode + NNLS + beats … s, chord model … s, the rest … s, in all … s, on sdk_gphone64_x86_64 (x86_64)`. While this plan was written and run, three emulator runs gave 20.1 s, 78.1 s and 22.1 s in all. If a phone is connected, also run `./gradlew :engine:connectedDebugAndroidTest` and `adb logcat -d -s ChordifyBenchmark` for its line.
 
 - [ ] **Step 3: Record the numbers**
 
