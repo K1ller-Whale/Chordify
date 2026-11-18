@@ -203,7 +203,7 @@ alone, for a 240 s song, from `FeatureBenchmarkDeviceTest`:
 | Device | ABI | Decode + NNLS features |
 |---|---|---|
 | Emulator (API 34, Google APIs, 2 cores) on an Intel Core i7-9750H laptop | x86_64 | 26.7–37.4 s (two runs) |
-| No phone measured yet | arm64-v8a | |
+| Samsung Galaxy A30s (Exynos 7904, Android 11) | arm64-v8a | Not measured on its own; with the beats, 27.0–28.5 s (below) |
 
 A separate emulator run timed each step (41.7 s in all): decoding the WAV 10.2 s, framing and FFT 22.3 s, the NNLS solve 9.2 s. The NNLS steps run about ten times slower there than on the server, so only a phone can tell whether the 20 s budget holds. Decoding a plain WAV taking 10–11 s is the engine's own overhead, not the codec's: cutting the decoding loop's `MediaCodec` waits from 10 ms to 1 ms changed nothing. The tests run as a debuggable build, so it is to be profiled on a phone before being optimised.
 
@@ -212,7 +212,7 @@ With beat tracking and the chord model (milestone M3a), for a 240 s song, from t
 | Device | ABI | Decode + NNLS + beats | Chord model |
 |---|---|---|---|
 | Emulator (API 34, Google APIs, 2 cores) on an Intel Core i7-9750H laptop | x86_64 | 39.5–55.7 s (four runs) | 9.6–25.6 s (four runs) |
-| No phone measured yet | arm64-v8a | | |
+| Samsung Galaxy A30s (Exynos 7904, Android 11) | arm64-v8a | 27.0–28.5 s (three runs) | 4.1–4.6 s (three runs) |
 
 The emulator's timings vary a lot between runs, and it runs NNLS about ten times slower than the server, so these numbers say little about a phone.
 
@@ -221,7 +221,7 @@ The whole analysis (milestone M3b), for a 240 s song: `ChordifyEngine.analyse`, 
 | Device | ABI | Decode + NNLS + beats | Chord model | The rest | In all |
 |---|---|---|---|---|---|
 | Emulator (API 34, Google APIs, 2 cores) on an Intel Core i7-9750H laptop | x86_64 | 14.9–55.2 s (three runs) | 3.9–17.8 s (three runs) | 1.2–5.1 s (three runs) | 20.1–78.1 s (three runs) |
-| No phone measured yet | arm64-v8a | | | | |
+| Samsung Galaxy A30s (Exynos 7904, Android 11) | arm64-v8a | 27.0–28.5 s (three runs) | 4.1–4.6 s (three runs) | 2.1–2.4 s (three runs) | **33.2–35.5 s** (three runs) |
 
 "The rest" covers both decodings, the key, theory and predictions: everything the server's `analyse()` does after the chord model.
 
@@ -239,7 +239,11 @@ The checks:
 
 The release App Bundle holds `arm64-v8a` and `x86_64`; an arm64 phone installs about 77 MB.
 
-Still open: the benchmark on a real phone (the `arm64-v8a` rows above). It needs a phone over USB: connect one with USB debugging on, then run `./gradlew :engine:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.arbaba.chordifymobile.engine.features.FeatureBenchmarkDeviceTest` in `Mobile/` and record the times it logs. The spec's target is 20 s or less for a 4-minute song.
+On a real phone, a 2019 Samsung Galaxy A30s, the whole analysis of a 4-minute song takes 33.2–35.5 s. That misses the spec's target of 20 s or less, set for a mid-range phone; the A30s is a budget one. The runs used the debuggable test build. Four fifths of the time is decoding, NNLS Chroma and the beats, so they are what to profile first, on a phone and in a release build.
+
+To measure another phone, connect it with USB debugging on and run `./gradlew :engine:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.arbaba.chordifymobile.engine.features.FeatureBenchmarkDeviceTest` in `Mobile/`. The times are logged under the tag `ChordifyBenchmark`.
+
+The app runs on Android 11 and later (`minSdk 30`). Its 53 device tests pass on the A30s as well as on the emulator.
 
 ## 4. Where the build differs from the plan
 
