@@ -29,9 +29,13 @@ class ExoAudioPlayerDeviceTest {
         val player = onMain { ExoAudioPlayer(instrumentation.targetContext, Uri.fromFile(file)).also { it.onEnded = { ended = true } } }
         try {
             onMain { player.play() }
-            SystemClock.sleep(1500)
-            val playedFor = onMain { player.positionSeconds }
-            assertTrue("played to $playedFor s after 1.5 s", playedFor in 0.5..2.0)
+            // The player prepares asynchronously, so time the playback from when it has started.
+            val started = SystemClock.elapsedRealtime() + 10_000
+            while (onMain { player.positionSeconds } < 0.05 && SystemClock.elapsedRealtime() < started) SystemClock.sleep(50)
+            val from = onMain { player.positionSeconds }
+            SystemClock.sleep(1000)
+            val playedFor = onMain { player.positionSeconds } - from
+            assertTrue("moved $playedFor s in 1 s", playedFor in 0.5..1.5)
 
             onMain { player.seekTo(6.0) }
             SystemClock.sleep(300)
