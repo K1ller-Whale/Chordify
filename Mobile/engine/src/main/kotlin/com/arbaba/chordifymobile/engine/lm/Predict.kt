@@ -7,19 +7,24 @@ import com.arbaba.chordifymobile.engine.util.median
 import com.arbaba.chordifymobile.engine.util.pyRound
 import com.arbaba.chordifymobile.engine.vocab.displayName
 import com.arbaba.chordifymobile.engine.vocab.parse
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
-// High-level prediction with explanations, from chordify_core/lm.py.
+// High-level prediction with explanations, from chordify_core/lm.py. Both classes serialise as the
+// server's Prediction and PriorEntry (chordify_backend/app/schemas.py).
 
+@Serializable
 data class Prediction(
     val label: String,
     val display: String,
     val roman: String?,
     val p: Double,
     val reason: String,
-    val cacheCount: Int = 0,
-    val expectedBeats: Double? = null,
+    @SerialName("cache_count") val cacheCount: Int = 0,
+    @SerialName("expected_beats") val expectedBeats: Double? = null,
 )
 
+@Serializable
 data class PriorEntry(val roman: String?, val p: Double)
 
 /** Top-[k] next chords after [history] (absolute Harte labels, chord changes in order).
