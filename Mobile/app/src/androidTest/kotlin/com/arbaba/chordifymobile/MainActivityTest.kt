@@ -1,10 +1,14 @@
 package com.arbaba.chordifymobile
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -16,7 +20,7 @@ class MainActivityTest {
 
     @Test
     fun theFourTabsOpenTheirScreens() {
-        compose.onNodeWithText("Library is not built yet.").assertIsDisplayed()
+        compose.onNodeWithText("Pick a file").assertIsDisplayed()
         compose.onNodeWithText("Quick chord").performClick()
         compose.onNodeWithText("Quick chord is not built yet.").assertIsDisplayed()
         compose.onNodeWithText("Songwriter").performClick()
@@ -24,6 +28,14 @@ class MainActivityTest {
         compose.onNodeWithText("Settings").performClick()
         compose.onNodeWithText("Settings is not built yet.").assertIsDisplayed()
         compose.onNodeWithText("Library").performClick()
-        compose.onNodeWithText("Library is not built yet.").assertIsDisplayed()
+        compose.onNodeWithText("Pick a file").assertIsDisplayed()
+    }
+
+    @Test
+    fun sharedAndOpenedAudioIsFound() {
+        val song = Uri.parse("content://media/external/audio/media/42")
+        assertEquals(song, MainActivity.sharedAudio(Intent(Intent.ACTION_SEND).setType("audio/mpeg").putExtra(Intent.EXTRA_STREAM, song)))
+        assertEquals(song, MainActivity.sharedAudio(Intent(Intent.ACTION_VIEW).setDataAndType(song, "audio/mpeg")))
+        assertNull(MainActivity.sharedAudio(Intent(Intent.ACTION_MAIN)))
     }
 }

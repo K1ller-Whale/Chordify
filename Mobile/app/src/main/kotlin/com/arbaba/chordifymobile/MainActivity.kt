@@ -1,6 +1,9 @@
 package com.arbaba.chordifymobile
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -24,18 +27,51 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.arbaba.chordifymobile.data.Settings
 import com.arbaba.chordifymobile.ui.ChordifyTheme
+import com.arbaba.chordifymobile.ui.library.LibraryScreen
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent { ChordifyTheme { ChordifyNavigation() } }
+        if (savedInstanceState == null) importShared(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        importShared(intent)
+    }
+
+    /** "Share to" (ACTION_SEND) and "Open with" (ACTION_VIEW) an audio file: add it to the library. */
+    private fun importShared(intent: Intent) {
+        val uri = sharedAudio(intent) ?: return
+        val container = (application as ChordifyApp).container
+        lifecycleScope.launch {
+            try {
+                container.library.import(uri, Settings.options(container.settings.majorMinorOnly.first()))
+            } catch (error: Exception) {
+                Toast.makeText(this@MainActivity, "Could not read this file: ${error.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    companion object {
+        /** The audio file an intent hands the app, if it is a share or an "open with". */
+        fun sharedAudio(intent: Intent): Uri? = when (intent.action) {
+            Intent.ACTION_SEND -> intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+            Intent.ACTION_VIEW -> intent.data
+            else -> null
+        }
     }
 }
 
@@ -46,8 +82,7 @@ private enum class Tab(val route: String, val label: String, val icon: ImageVect
     SETTINGS("settings", "Settings", Icons.Filled.Settings),
 }
 
-/** The four tabs of spec §6.2. The Library comes with the library screen; Quick chord, Songwriter
- *  and Settings arrive in milestone M6. */
+/** The four tabs of spec §6.2. Quick chord, Songwriter and Settings arrive in milestone M6. */
 @Composable
 fun ChordifyNavigation() {
     val navigation = rememberNavController()
@@ -71,7 +106,7 @@ fun ChordifyNavigation() {
         }
     }) { padding ->
         NavHost(navigation, startDestination = Tab.LIBRARY.route, modifier = Modifier.padding(padding)) {
-            composable(Tab.LIBRARY.route) { NotBuiltYet("Library") }
+            composable(Tab.LIBRARY.route) { LibraryScreen() }
             composable(Tab.QUICK_CHORD.route) { NotBuiltYet("Quick chord") }
             composable(Tab.SONGWRITER.route) { NotBuiltYet("Songwriter") }
             composable(Tab.SETTINGS.route) { NotBuiltYet("Settings") }
