@@ -13,7 +13,7 @@ ENV PATH=/venv/bin:$PATH VAMP_PATH=/opt/vamp
 # soxr and vamp are pinned: the engine compiles the libsoxr and Vamp SDK sources these
 # releases bundle (Mobile/engine/src/main/cpp/third_party/README.md).
 RUN pip install -q --upgrade pip setuptools wheel numpy \
-    && pip install -q scipy librosa soundfile soxr==1.1.0 pytest \
+    && pip install -q scipy librosa==1.0.1 soundfile soxr==1.1.0 onnxruntime==1.30.0 pytest \
     && pip install -q --no-build-isolation vamp==1.1.0
 
 COPY install_nnls_chroma.sh /tmp/install_nnls_chroma.sh

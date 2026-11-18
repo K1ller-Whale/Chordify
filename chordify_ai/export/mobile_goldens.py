@@ -1,18 +1,19 @@
 """Golden files for the Android engine, the Kotlin port of chordify_core.
 
-    python -m chordify_ai.export.mobile_goldens                 # every file
+    python -m chordify_ai.export.mobile_goldens                 # every file this machine can write
     python -m chordify_ai.export.mobile_goldens --only vocab    # one file
-    tools/mobile_goldens.sh                                     # features.json.gz (needs Docker)
+    tools/mobile_goldens.sh                                     # features, beats, acoustic (needs Docker)
 
 Each file holds inputs and what chordify_core returns for them. The engine's tests
 (Mobile/engine/src/test and src/androidTest) replay the inputs through the Kotlin port and
 compare, and tests/ai/test_mobile_goldens.py fails when chordify_core changes and the files
 are stale. Inputs are deterministic and never come from numpy's random generators, whose
 streams may change between numpy releases. The one exception, the rendered audio in
-goldens/audio, is committed and only re-rendered on purpose (--render-audio).
+goldens/audio, is committed: --render-audio writes the inputs that are missing, never the others.
 
-features.json.gz needs the NNLS Chroma Vamp plugin, which tools/mobile_goldens.sh provides in
-a Linux container. Where the plugin is not installed, that file is skipped.
+features.json.gz needs the NNLS Chroma Vamp plugin, and beats.json.gz and acoustic.json.gz the
+librosa and ONNX Runtime releases in PINNED. tools/mobile_goldens.sh provides all three in a Linux
+container; elsewhere a file that cannot be reproduced is skipped, and missing(name) says why.
 """
 from __future__ import annotations
 
@@ -384,6 +385,10 @@ def decode_golden() -> dict:
 AUDIO_DIR = DEFAULT_OUT / "audio"
 LOOP = [("C:maj", 2.0), ("G:maj", 2.0), ("A:min", 2.0), ("F:maj", 2.0)]
 SEVENTHS = [("C:maj7", 2.0), ("A:min7", 2.0), ("D:min7", 2.0), ("G:7", 2.0)]
+# One chord attack per beat, so the beat tracker has a pulse to find: 4/4 at 120 bpm (16 s) and
+# 3/4 at 150 bpm (9.6 s), with the chord changing on every bar.
+PULSE = [(label, 0.5) for label in ("C:maj", "G:maj", "A:min", "F:maj") for _ in range(8)]
+WALTZ = [(label, 0.4) for label in ("C:maj", "G:maj", "A:min", "F:maj") * 2 for _ in range(3)]
 # 16-bit WAV inputs, which every decoder reads exactly. Each one exercises one more step:
 # plain 44.1 kHz; digital silence at both ends; resampling down; stereo and resampling up.
 WAV_INPUTS = ["loop.wav", "loop_padded.wav", "loop_48k.wav", "sevenths_stereo_22k.wav"]
@@ -417,8 +422,9 @@ def envelope_offset_ms(reference: np.ndarray, other: np.ndarray, sr: int) -> flo
 
 
 def render_audio(audio_dir: Path = AUDIO_DIR) -> None:
-    """Write the audio inputs. They are committed and only re-rendered on purpose
-    (--render-audio): the synthesiser's noise comes from numpy's random generator."""
+    """Write the audio inputs that are missing. They are committed and only rendered on purpose
+    (--render-audio): the synthesiser's noise comes from numpy's random generator, so a render on
+    another machine may differ, and committed inputs are never overwritten."""
     import subprocess
 
     import soundfile as sf
@@ -426,19 +432,29 @@ def render_audio(audio_dir: Path = AUDIO_DIR) -> None:
     from chordify_core import audio, synth
 
     audio_dir.mkdir(parents=True, exist_ok=True)
-    loop, _ = synth.render_progression(LOOP, sr=44100)
-    sf.write(audio_dir / "loop.wav", loop, 44100, subtype="PCM_16")
+
+    def write(name: str, render) -> None:
+        if not (audio_dir / name).exists():
+            y, sr = render()
+            sf.write(audio_dir / name, y, sr, subtype="PCM_16")
+
+    def loop(sr: int) -> np.ndarray:
+        return synth.render_progression(LOOP, sr=sr)[0]
+
     silence = np.zeros(int(1.5 * 44100), dtype=np.float32)
-    sf.write(audio_dir / "loop_padded.wav", np.concatenate([silence, loop, silence]), 44100, subtype="PCM_16")
-    loop48, _ = synth.render_progression(LOOP, sr=48000)
-    sf.write(audio_dir / "loop_48k.wav", loop48, 48000, subtype="PCM_16")
-    left, _ = synth.render_progression(SEVENTHS, sr=22050, seed=1)
-    right, _ = synth.render_progression(SEVENTHS, sr=22050, seed=2)
-    sf.write(audio_dir / "sevenths_stereo_22k.wav", np.stack([left, 0.6 * right], axis=1), 22050, subtype="PCM_16")
+    write("loop.wav", lambda: (loop(44100), 44100))
+    write("loop_padded.wav", lambda: (np.concatenate([silence, loop(44100), silence]), 44100))
+    write("loop_48k.wav", lambda: (loop(48000), 48000))
+    write("sevenths_stereo_22k.wav", lambda: (np.stack([synth.render_progression(SEVENTHS, sr=22050, seed=1)[0],
+                                                        0.6 * synth.render_progression(SEVENTHS, sr=22050, seed=2)[0]],
+                                                       axis=1), 22050))
+    write("pulse.wav", lambda: (synth.render_progression(PULSE, sr=44100)[0], 44100))
+    write("waltz.wav", lambda: (synth.render_progression(WALTZ, sr=44100)[0], 44100))
     for name, codec in ENCODED_INPUTS.items():
-        subprocess.run([audio.ffmpeg_binary(), "-nostdin", "-loglevel", "error", "-y", "-i",
-                        str(audio_dir / "loop.wav"), *codec, "-map_metadata", "-1", "-fflags", "+bitexact",
-                        "-flags:a", "+bitexact", str(audio_dir / name)], check=True)
+        if not (audio_dir / name).exists():
+            subprocess.run([audio.ffmpeg_binary(), "-nostdin", "-loglevel", "error", "-y", "-i",
+                            str(audio_dir / "loop.wav"), *codec, "-map_metadata", "-1", "-fflags", "+bitexact",
+                            "-flags:a", "+bitexact", str(audio_dir / name)], check=True)
 
 
 def _f32(values) -> list[float]:
@@ -502,10 +518,118 @@ def features_golden() -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# beats: librosa's onset strength and dynamic-programming beat tracker
+# ---------------------------------------------------------------------------
+
+BEAT_INPUTS = WAV_INPUTS + ["pulse.wav", "waltz.wav"]
+BEAT_SR = 22050  # chordify_backend.app.pipeline.beats.track_beats resamples to this, hop 512
+BEAT_HOP = 512
+ONSET_CASE_SECONDS = 2.0
+
+
+def beats_golden() -> dict:
+    import librosa
+
+    from chordify_backend.app.pipeline.beats import track_beats
+    from chordify_core import audio
+
+    reason = missing("beats")
+    if reason:
+        raise SystemExit(f"beats.json.gz {reason}: run tools/mobile_goldens.sh")
+    mel = librosa.filters.mel(sr=BEAT_SR, n_fft=2048, fmax=0.5 * BEAT_SR)  # onset_strength's filters
+    rows, cols = np.nonzero(mel)
+    rng = Lcg(5)
+    frame = np.asarray([rng.random() * 2 - 1 for _ in range(2048)])
+    spectrum = np.fft.rfft(frame)
+    inputs = []
+    for name in BEAT_INPUTS:
+        y44 = audio.load_audio((AUDIO_DIR / name).read_bytes(), 44100, filename=name)
+        y22 = librosa.resample(y44, orig_sr=44100, target_sr=BEAT_SR)
+        onset = librosa.onset.onset_strength(y=y22, sr=BEAT_SR, hop_length=BEAT_HOP)
+        tempo, frames = librosa.beat.beat_track(onset_envelope=onset, sr=BEAT_SR, hop_length=BEAT_HOP,
+                                                units="frames", trim=False)
+        tempogram = librosa.feature.tempogram(onset_envelope=onset, sr=BEAT_SR, hop_length=BEAT_HOP,
+                                              win_length=344).mean(axis=1)
+        info = track_beats(y44, 44100)
+        inputs.append({"file": name, "samples_22k": len(y22), "onset": _f32(onset),
+                       "tempogram": tempogram.tolist(), "tempo": float(np.atleast_1d(tempo)[0]),
+                       "beat_frames": [int(f) for f in frames], "beats": info.beats.tolist(), "bpm": info.bpm,
+                       "confidence": info.confidence, "usable": info.usable})
+    pulse = audio.load_audio((AUDIO_DIR / "pulse.wav").read_bytes(), 44100, filename="pulse.wav")
+    clip = librosa.resample(pulse, orig_sr=44100, target_sr=BEAT_SR)[:int(ONSET_CASE_SECONDS * BEAT_SR)]
+    return {
+        "environment": {name: _version(name) for name in ("numpy", "librosa", "soxr", "soundfile")},
+        "mel": {"shape": list(mel.shape), "rows": rows.tolist(), "cols": cols.tolist(), "values": _f32(mel[rows, cols])},
+        "fft": {"frame": frame.tolist(), "re": spectrum.real.tolist(), "im": spectrum.imag.tolist()},
+        "onset_case": {"y": _f32(clip), "onset": _f32(librosa.onset.onset_strength(y=clip, sr=BEAT_SR, hop_length=BEAT_HOP))},
+        "inputs": inputs,
+    }
+
+
+# ---------------------------------------------------------------------------
+# acoustic: the shipped ChordNet with ONNX Runtime, on features.json.gz's raw features
+# ---------------------------------------------------------------------------
+
+ACOUSTIC_BUNDLE = REPO / "models" / "chordnet-chroma" / "3.0.0"
+ACOUSTIC_TILES = 4  # loop.wav's 173 frames four times over: longer than one 512-frame window
+
+
+def acoustic_golden() -> dict:
+    from chordify_core import acoustic
+
+    reason = missing("acoustic")
+    if reason:
+        raise SystemExit(f"acoustic.json.gz {reason}")
+    model = acoustic.OnnxChordModel(ACOUSTIC_BUNDLE)
+    loop = np.asarray(next(row["raw"] for row in read_golden(DEFAULT_OUT, "features")["inputs"]
+                           if row["file"] == "loop.wav"), dtype=np.float32)
+    cases = []
+    for name, raw in (("loop.wav", loop), (f"loop.wav x{ACOUSTIC_TILES}", np.tile(loop, (ACOUSTIC_TILES, 1)))):
+        logits = acoustic.windowed(model._run, acoustic.prepare(model.feature_spec, raw), model.window, model.margin)
+        cases.append({"case": name, "tiles": 1 if name == "loop.wav" else ACOUSTIC_TILES, "frames": len(raw),
+                      "logits": {head: _f32(v) if v.ndim == 1 else _f32_rows(v) for head, v in logits.items()}})
+    first = cases[0]["logits"]
+    softmax_in = np.asarray(first["chord"][:3], dtype=np.float32)
+    sigmoid_in = np.asarray(first["boundary"][:3], dtype=np.float32)
+
+    def fake(chunk: np.ndarray) -> dict:  # each window's output depends on where in the window a frame sits
+        return {"a": chunk[:, :, :1] + np.arange(chunk.shape[1], dtype=np.float32)[None, :, None] / 1000}
+
+    windows = [{"frames": n, "out": _f32(acoustic.windowed(fake, np.arange(n, dtype=np.float32)[:, None], 512, 64)["a"][:, 0])}
+               for n in (300, 512, 1300)]
+    return {"environment": {"numpy": _version("numpy"), "onnxruntime": _version("onnxruntime")},
+            "bundle": model.id, "cases": cases, "windowed": windows,
+            "softmax": {"logits": _f32_rows(softmax_in), "p": _f32_rows(acoustic.softmax(softmax_in))},
+            "sigmoid": {"logits": _f32(sigmoid_in), "p": _f32(acoustic.sigmoid(sigmoid_in))}}
+
+
 FILES = {"vocab": vocab_golden, "theory": theory_golden, "lm": lm_golden, "decode": decode_golden,
-         "features": features_golden}
-NEEDS_NNLS = {"features"}  # skipped by default where the NNLS Chroma plugin is not installed
-GZIPPED = {"features"}  # large, so stored compressed
+         "features": features_golden, "beats": beats_golden, "acoustic": acoustic_golden}
+# The reference versions of what shapes a file; elsewhere it is skipped by default (and by the test).
+PINNED = {"beats": ("librosa", "1.0.1"), "acoustic": ("onnxruntime", "1.30.0")}
+GZIPPED = {"features", "beats", "acoustic"}  # large, so stored compressed
+
+
+def _version(package: str) -> str | None:
+    from importlib import metadata
+
+    try:
+        return metadata.version(package)
+    except metadata.PackageNotFoundError:
+        return None
+
+
+def missing(name: str) -> str | None:
+    """Why this machine cannot write golden file ``name`` as the reference does, or None."""
+    if name == "features":
+        from chordify_core.features import nnls_available
+
+        return None if nnls_available() else "needs NNLS Chroma"
+    if name in PINNED:
+        package, version = PINNED[name]
+        return None if _version(package) == version else f"needs {package}=={version}"
+    return None
 
 
 def golden_path(out: Path, name: str) -> Path:
@@ -522,7 +646,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", default=str(DEFAULT_OUT))
     parser.add_argument("--only", choices=sorted(FILES), action="append")
     parser.add_argument("--render-audio", action="store_true",
-                        help=f"re-render the committed audio inputs in {AUDIO_DIR} first")
+                        help=f"render the audio inputs missing from {AUDIO_DIR} first")
     args = parser.parse_args(argv)
     if args.render_audio:
         render_audio()
@@ -530,11 +654,9 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     names = args.only
     if names is None:
-        from chordify_core.features import nnls_available
-
-        names = [n for n in FILES if n not in NEEDS_NNLS or nnls_available()]
+        names = [n for n in FILES if missing(n) is None]
         for skipped in FILES.keys() - set(names):
-            print(f"{golden_path(out, skipped).name}: skipped, needs NNLS Chroma (tools/mobile_goldens.sh)")
+            print(f"{golden_path(out, skipped).name}: skipped, {missing(skipped)} (tools/mobile_goldens.sh)")
     for name in names:
         text = json.dumps(FILES[name](), ensure_ascii=False, allow_nan=False, separators=(",", ":")) + "\n"
         path = golden_path(out, name)

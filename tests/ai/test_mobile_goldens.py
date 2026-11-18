@@ -2,16 +2,15 @@
 chordify_core does now. When this fails, regenerate them and commit the result:
 
     python -m chordify_ai.export.mobile_goldens
-    tools/mobile_goldens.sh        # features.json.gz, which needs the NNLS Chroma plugin
+    tools/mobile_goldens.sh        # features, beats and acoustic, with NNLS Chroma and the pinned reference
 """
 import pytest
 
 from chordify_ai.export import mobile_goldens
-from chordify_core import features
 
 # (rel, abs) per file. NNLS Chroma is built with -ffast-math, so two compilers or two numpy
 # builds agree on its features only to about 1e-6; everything else is exact arithmetic.
-TOLERANCE = {"features": (1e-4, 1e-5)}
+TOLERANCE = {"features": (1e-4, 1e-5), "beats": (1e-4, 1e-5), "acoustic": (1e-4, 1e-5)}
 
 
 def _same(fresh, committed, rel, abs_, path="$"):
@@ -32,8 +31,9 @@ def _same(fresh, committed, rel, abs_, path="$"):
 
 @pytest.mark.parametrize("name", sorted(mobile_goldens.FILES))
 def test_committed_goldens_match_chordify_core(tmp_path, name):
-    if name in mobile_goldens.NEEDS_NNLS and not features.nnls_available():
-        pytest.skip("needs the NNLS Chroma Vamp plugin (tools/install_nnls_chroma.sh)")
+    reason = mobile_goldens.missing(name)
+    if reason:
+        pytest.skip(f"{name} {reason}, as tools/mobile_goldens.Dockerfile provides")
     mobile_goldens.main(["--out", str(tmp_path), "--only", name])
     fresh = mobile_goldens.read_golden(tmp_path, name)
     committed = mobile_goldens.read_golden(mobile_goldens.DEFAULT_OUT, name)
