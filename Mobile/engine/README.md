@@ -11,6 +11,12 @@ Each package under `src/main/kotlin/com/arbaba/chordifymobile/engine/` ports the
 even, `str.partition`, `numpy.searchsorted`, …). `audio/` decodes any file Android can play
 with `MediaCodec` and streams it, mono at 44.1 kHz, into `features/`.
 
+`beats/` ports librosa's onset strength and beat tracker (librosa 1.0.1, as the server pins it),
+and `acoustic/` runs the shipped ChordNet with ONNX Runtime. `analysis.runFrontEnd` decodes a file
+once into both NNLS Chroma and the beat tracker. The model files are not in `src/`: Gradle copies
+`chordnet-chroma/3.0.0` and `progression-ngram/1.0.0` from the repository's `models/` into the
+assets at build time, so git holds one copy of each.
+
 ## Native code
 
 `src/main/cpp/` builds `libchordify_engine.so` for arm64-v8a and x86_64 (NDK 27.0, CMake 3.22.1):
@@ -44,7 +50,7 @@ the repository root and commit them with the change:
 
 ```bash
 python -m chordify_ai.export.mobile_goldens   # vocab, theory, lm, decode
-tools/mobile_goldens.sh                        # features.json.gz, in Docker, with NNLS Chroma
+tools/mobile_goldens.sh                        # features, beats and acoustic, in Docker with the pinned reference
 ```
 
 `goldens/audio/` holds the audio inputs, rendered once (`tools/mobile_goldens.sh --render-audio`)

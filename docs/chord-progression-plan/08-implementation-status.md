@@ -207,6 +207,15 @@ alone, for a 240 s song, from `FeatureBenchmarkDeviceTest`:
 
 A separate emulator run timed each step (41.7 s in all): decoding the WAV 10.2 s, framing and FFT 22.3 s, the NNLS solve 9.2 s. The NNLS steps run about ten times slower there than on the server, so only a phone can tell whether the 20 s budget holds. Decoding a plain WAV taking 10–11 s is the engine's own overhead, not the codec's: cutting the decoding loop's `MediaCodec` waits from 10 ms to 1 ms changed nothing. The tests run as a debuggable build, so it is to be profiled on a phone before being optimised.
 
+With beat tracking and the chord model (milestone M3a), for a 240 s song, from the same test:
+
+| Device | ABI | Decode + NNLS + beats | Chord model |
+|---|---|---|---|
+| Emulator (API 34, Google APIs, 2 cores) on an Intel Core i7-9750H laptop | x86_64 | 39.5–55.7 s (four runs) | 9.6–25.6 s (four runs) |
+| No phone measured yet | arm64-v8a | | |
+
+The emulator's timings vary a lot between runs, and it runs NNLS about ten times slower than the server, so these numbers say little about a phone.
+
 ## 4. Where the build differs from the plan
 
 | Plan | Built | Why | Revisit when |
