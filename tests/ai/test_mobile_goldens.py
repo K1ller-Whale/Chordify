@@ -2,7 +2,7 @@
 chordify_core does now. When this fails, regenerate them and commit the result:
 
     python -m chordify_ai.export.mobile_goldens
-    tools/mobile_goldens.sh        # features, beats and acoustic, with NNLS Chroma and the pinned reference
+    tools/mobile_goldens.sh        # features, beats, acoustic and analysis, with NNLS Chroma and the pinned reference
 """
 import pytest
 
@@ -10,7 +10,7 @@ from chordify_ai.export import mobile_goldens
 
 # (rel, abs) per file. NNLS Chroma is built with -ffast-math, so two compilers or two numpy
 # builds agree on its features only to about 1e-6; everything else is exact arithmetic.
-TOLERANCE = {"features": (1e-4, 1e-5), "beats": (1e-4, 1e-5), "acoustic": (1e-4, 1e-5)}
+TOLERANCE = {"features": (1e-4, 1e-5), "beats": (1e-4, 1e-5), "acoustic": (1e-4, 1e-5), "analysis": (1e-4, 1e-5)}
 
 
 def _same(fresh, committed, rel, abs_, path="$"):

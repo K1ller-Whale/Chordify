@@ -2,7 +2,7 @@
 
     python -m chordify_ai.export.mobile_goldens                 # every file this machine can write
     python -m chordify_ai.export.mobile_goldens --only vocab    # one file
-    tools/mobile_goldens.sh                                     # features, beats, acoustic (needs Docker)
+    tools/mobile_goldens.sh                                     # features, beats, acoustic, analysis (needs Docker)
 
 Each file holds inputs and what chordify_core returns for them. The engine's tests
 (Mobile/engine/src/test and src/androidTest) replay the inputs through the Kotlin port and
@@ -11,9 +11,10 @@ are stale. Inputs are deterministic and never come from numpy's random generator
 streams may change between numpy releases. The one exception, the rendered audio in
 goldens/audio, is committed: --render-audio writes the inputs that are missing, never the others.
 
-features.json.gz needs the NNLS Chroma Vamp plugin, and beats.json.gz and acoustic.json.gz the
-librosa and ONNX Runtime releases in PINNED. tools/mobile_goldens.sh provides all three in a Linux
-container; elsewhere a file that cannot be reproduced is skipped, and missing(name) says why.
+features.json.gz needs the NNLS Chroma Vamp plugin, beats.json.gz and acoustic.json.gz the librosa
+and ONNX Runtime releases in PINNED, and analysis.json.gz all three (NEEDS). tools/mobile_goldens.sh
+provides them in a Linux container; elsewhere a file that cannot be reproduced is skipped, and
+missing(name) says why.
 """
 from __future__ import annotations
 
@@ -450,6 +451,7 @@ def render_audio(audio_dir: Path = AUDIO_DIR) -> None:
                                                        axis=1), 22050))
     write("pulse.wav", lambda: (synth.render_progression(PULSE, sr=44100)[0], 44100))
     write("waltz.wav", lambda: (synth.render_progression(WALTZ, sr=44100)[0], 44100))
+    write("silence.wav", lambda: (np.zeros(3 * 44100, dtype=np.float32), 44100))
     for name, codec in ENCODED_INPUTS.items():
         if not (audio_dir / name).exists():
             subprocess.run([audio.ffmpeg_binary(), "-nostdin", "-loglevel", "error", "-y", "-i",
@@ -604,11 +606,138 @@ def acoustic_golden() -> dict:
             "sigmoid": {"logits": _f32(sigmoid_in), "p": _f32(acoustic.sigmoid(sigmoid_in))}}
 
 
+# ---------------------------------------------------------------------------
+# analysis: chordify_backend's analyse() end to end, next-chord suggestions and single_chord
+# ---------------------------------------------------------------------------
+
+ANALYSIS_INPUTS = BEAT_INPUTS + ["silence.wav"]
+ANALYSIS_ID = "an_golden"
+ANALYSIS_SR = 44100  # the server's decode_sample_rate
+REPLAYS = [  # loop.wav's recorded outputs again, with each analysis option
+    {"vocabulary": "majmin"}, {"vocabulary": "sevenths"}, {"predictions": False}, {"min_segment_beats": 2}]
+QUICK_CLIPS = [("loop.wav", 0.0, 2.0), ("loop.wav", 2.0, 4.0), ("loop.wav", 4.0, 6.0), ("loop.wav", 6.0, 8.0),
+               ("pulse.wav", 0.0, 2.0), ("silence.wav", 0.0, 1.5)]
+PROGRESSION_REQUESTS = [
+    {"chords": ["C", "G", "Am", "F"]},
+    {"chords": ["G", "Em", "C", "D7"], "k": 5},
+    {"chords": ["Am", "F", "C", "G"], "key": "C"},
+    {"chords": ["D", "A/C#", "Bm", "G"], "durations_beats": [4, 2, 2, 8]},
+    {"chords": ["Cmaj7", "Am7", "Dm7", "G7"], "key": "C major"},
+    {"chords": ["N.C.", "E", "B", "C#m", "A"]},
+    {"chords": ["Bb", "F/A", "Gm7", "Eb"], "k": 1},
+    {"chords": ["Hm", "C"]},
+    {"chords": ["N.C."]},
+    {"chords": ["C", "G"], "durations_beats": [4]},
+    {"chords": ["C", "F"], "key": "H major"},
+]
+
+
+def _analysis_models():
+    from chordify_backend.app.pipeline.models import Models
+    from chordify_core.acoustic import OnnxChordModel
+    from chordify_core.lm import NgramProgressionModel
+
+    bundle = json.loads((LM_MODEL.parent / "bundle.json").read_text())
+    return Models(acoustic=OnnxChordModel(ACOUSTIC_BUNDLE), lm=NgramProgressionModel.load(LM_MODEL), lm_id=bundle["id"])
+
+
+def _run_analyse(models, y: np.ndarray, **kwargs) -> dict:
+    """analyse() as the server's job runs it: the document as stored, or the error it fails with."""
+    from chordify_backend.app.pipeline import analysis
+    from chordify_backend.app.schemas import AnalysisResult
+
+    try:
+        result = analysis.analyse(y, ANALYSIS_SR, models=models, analysis_id=ANALYSIS_ID, **kwargs)
+    except analysis.NoMusicDetected as err:
+        return {"error": {"code": "NO_MUSIC_DETECTED", "message": str(err)}}
+    return {"result": AnalysisResult.model_validate(result).model_dump(mode="json", by_alias=True)}
+
+
+def _replay(models, samples: int, beats, output, **kwargs) -> dict:
+    """analyse() with its audio stages (beats, features, model) replaced by recorded results:
+    what the engine's JVM tests replay."""
+    from unittest import mock
+
+    from chordify_backend.app.pipeline import analysis
+
+    with mock.patch.object(analysis, "track_beats", lambda y, sr: beats), \
+            mock.patch.object(analysis.features, "extract", lambda spec, y, sr: None), \
+            mock.patch.object(models.acoustic, "predict", lambda raw: output):
+        return _run_analyse(models, np.zeros(samples, dtype=np.float32), **kwargs)
+
+
+def analysis_golden() -> dict:
+    import hashlib
+    from types import SimpleNamespace
+
+    from chordify_backend.app.api import progressions
+    from chordify_backend.app.errors import ApiError
+    from chordify_backend.app.pipeline.analysis import decode_chords, single_chord
+    from chordify_backend.app.pipeline.beats import track_beats
+    from chordify_backend.app.schemas import ProgressionRequest, ProgressionResponse
+    from chordify_core import audio, features, theory
+
+    reason = missing("analysis")
+    if reason:
+        raise SystemExit(f"analysis.json.gz {reason}: run tools/mobile_goldens.sh")
+    models = _analysis_models()
+    spec = models.acoustic.feature_spec
+    inputs, recorded = [], {}
+    for name in ANALYSIS_INPUTS:
+        data = (AUDIO_DIR / name).read_bytes()
+        source = {"filename": name, "sha256": hashlib.sha256(data).hexdigest()}
+        y = audio.load_audio(data, ANALYSIS_SR, filename=name)  # the server's decode
+        beats = track_beats(y, ANALYSIS_SR)
+        output = models.acoustic.predict(features.extract(spec, y, ANALYSIS_SR))
+        outcome = _replay(models, len(y), beats, output, **source)
+        assert outcome == _run_analyse(models, y, **source), f"replaying {name} differs from analysing it"
+        first = decode_chords(models, output.chord, output.boundary, spec, len(y) / ANALYSIS_SR, beats)
+        labels = [(models.acoustic.vocabulary.decode(s.index), s.duration) for s in first]
+        key, confidence = theory.estimate_key_from_chords(labels)
+        recorded[name] = (len(y), beats, output, source)
+        inputs.append({"file": name, "samples": len(y), **source,
+                       "beats": {"beats": beats.beats.tolist(), "bpm": beats.bpm, "confidence": beats.confidence},
+                       "output": {"chord": _f32_rows(output.chord), "boundary": _f32(output.boundary),
+                                  "bass": _f32_rows(output.extra["bass"])},
+                       "first_pass": [{"start": s.start, "end": s.end, "label": label, "confidence": s.confidence}
+                                      for s, (label, _) in zip(first, labels)],
+                       "key": {**key.to_dict(), "confidence": confidence}, **outcome})
+    samples, beats, output, source = recorded["loop.wav"]
+    replays = [{"file": "loop.wav", "options": options, **_replay(models, samples, beats, output, **source, **options)}
+               for options in REPLAYS]
+
+    quick = []
+    for name, start, end in QUICK_CLIPS:
+        y = audio.load_audio((AUDIO_DIR / name).read_bytes(), ANALYSIS_SR, filename=name)
+        clip = y[int(start * ANALYSIS_SR):int(end * ANALYSIS_SR)]
+        label, confidence = single_chord(models, clip, ANALYSIS_SR)
+        chord = models.acoustic.predict(features.extract(spec, clip, ANALYSIS_SR)).chord
+        quick.append({"file": name, "start": start, "end": end, "chord": _f32_rows(chord), "label": label,
+                      "confidence": confidence})
+
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(models=models)))
+    suggestions = []
+    for body in PROGRESSION_REQUESTS:
+        try:
+            response = progressions.next_chords(ProgressionRequest(**body), request)
+            suggestions.append({"request": body, "response": ProgressionResponse.model_validate(response)
+                               .model_dump(mode="json")})
+        except ApiError as err:
+            suggestions.append({"request": body, "error": {"code": err.code, "message": err.detail}})
+    return {"environment": _environment() | {"onnxruntime": _version("onnxruntime")}, "models": models.ids,
+            "sample_rate": ANALYSIS_SR, "analysis_id": ANALYSIS_ID, "inputs": inputs, "replays": replays,
+            "quick_chord": quick, "next_chords": suggestions}
+
+
 FILES = {"vocab": vocab_golden, "theory": theory_golden, "lm": lm_golden, "decode": decode_golden,
-         "features": features_golden, "beats": beats_golden, "acoustic": acoustic_golden}
-# The reference versions of what shapes a file; elsewhere it is skipped by default (and by the test).
-PINNED = {"beats": ("librosa", "1.0.1"), "acoustic": ("onnxruntime", "1.30.0")}
-GZIPPED = {"features", "beats", "acoustic"}  # large, so stored compressed
+         "features": features_golden, "beats": beats_golden, "acoustic": acoustic_golden,
+         "analysis": analysis_golden}
+# The reference versions of what shapes the files, and what each file needs; elsewhere a file is
+# skipped by default (and by the test).
+PINNED = {"librosa": "1.0.1", "onnxruntime": "1.30.0"}
+NEEDS = {"features": ["nnls"], "beats": ["librosa"], "acoustic": ["onnxruntime"],
+         "analysis": ["nnls", "librosa", "onnxruntime"]}
+GZIPPED = {"features", "beats", "acoustic", "analysis"}  # large, so stored compressed
 
 
 def _version(package: str) -> str | None:
@@ -622,13 +751,14 @@ def _version(package: str) -> str | None:
 
 def missing(name: str) -> str | None:
     """Why this machine cannot write golden file ``name`` as the reference does, or None."""
-    if name == "features":
-        from chordify_core.features import nnls_available
+    for need in NEEDS.get(name, []):
+        if need == "nnls":
+            from chordify_core.features import nnls_available
 
-        return None if nnls_available() else "needs NNLS Chroma"
-    if name in PINNED:
-        package, version = PINNED[name]
-        return None if _version(package) == version else f"needs {package}=={version}"
+            if not nnls_available():
+                return "needs NNLS Chroma"
+        elif _version(need) != PINNED[need]:
+            return f"needs {need}=={PINNED[need]}"
     return None
 
 
