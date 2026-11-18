@@ -225,6 +225,22 @@ The whole analysis (milestone M3b), for a 240 s song: `ChordifyEngine.analyse`, 
 
 "The rest" covers both decodings, the key, theory and predictions: everything the server's `analyse()` does after the chord model.
 
+### 3.7 The Android app
+
+`Mobile/` is a Kotlin and Compose app. It runs the whole v2 analysis on the phone, with no network access ([spec](../superpowers/specs/2026-11-17-mobile-on-device-design.md); plans M1–M6 in `docs/superpowers/plans/`). Its screens are the web app's:
+- the Library, with import, sharing and recording, and analyses as background jobs;
+- the analysis screen: header, capo, Letters/Roman, Now playing, What comes next, the timeline with the waveform, and the Lead sheet, Circle of fifths and Stats tabs, with export as `.lab` or `.json`;
+- Quick chord, the Songwriter, Settings and About.
+
+The checks:
+- The engine matches Python's golden files: 74 JVM tests and 28 device tests.
+- The app's logic matches the web's own `music.ts` and `capo.ts` (`tools/web_goldens.mjs`).
+- The app has its own JVM and emulator tests for every screen, playback, the library, export and accessibility. They are counted in `Mobile/README.md` and run in CI.
+
+The release App Bundle holds `arm64-v8a` and `x86_64`; an arm64 phone installs about 77 MB.
+
+Still open: the benchmark on a real phone (the `arm64-v8a` rows above). It needs a phone over USB: connect one with USB debugging on, then run `./gradlew :engine:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.arbaba.chordifymobile.engine.features.FeatureBenchmarkDeviceTest` in `Mobile/` and record the times it logs. The spec's target is 20 s or less for a 4-minute song.
+
 ## 4. Where the build differs from the plan
 
 | Plan | Built | Why | Revisit when |
@@ -244,8 +260,8 @@ The whole analysis (milestone M3b), for a 240 s song: `ChordifyEngine.analyse`, 
 3. **Chordify-Live.** Record and label the phone/guitar test set ([02 §5](02-datasets.md)): the only in-domain measure for the Quick chord screen.
 4. **ProgressionLM.** Ingest Chordonomicon + ChoCo symbolic, train the Transformer, and gate it against [§3.3](#33-progression-model-the-gate-progressionlm-has-to-beat).
 5. **Local keys and sections.**
-6. Phase 3 onward as in [07](07-roadmap.md): audio-domain model v3, Android on v2, live mode.
-7. **Remove v1.** Delete the v1 classifier files in `chordify_ai/` and the v1 endpoints once Android uses v2.
+6. Phase 3 onward as in [07](07-roadmap.md): audio-domain model v3, live mode. Android is done: `Mobile/` runs the v2 analysis on the phone ([§3.7](#37-the-android-app)).
+7. **Remove v1.** Delete the v1 classifier files in `chordify_ai/` and the v1 endpoints. The Android app no longer calls the server; only the web Quick chord screen still calls v1 `/predict`, so it moves to v2 first.
 
 ## 6. Running it
 
