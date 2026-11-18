@@ -22,6 +22,14 @@ cd Mobile
 ./gradlew :app:api34DebugAndroidTest        # device tests of the app, on the managed emulator
 ```
 
+`app/src/test/resources/goldens/web.json` holds what the web app's own `music.ts` and `capo.ts`
+return for a set of inputs, so the app's port can be checked against them. After changing
+either file, regenerate it from the repository root (Node 22) and commit it:
+
+```bash
+node --experimental-strip-types tools/web_goldens.mjs
+```
+
 The engine's own tests are in [`engine/README.md`](engine/README.md). Gradle 8.10 runs on JDK
 17 or 21. The device tests use the Gradle-managed emulator (Pixel 6, API 34, Google APIs,
 x86_64). They analyse the engine's golden audio inputs through the app's own library, database

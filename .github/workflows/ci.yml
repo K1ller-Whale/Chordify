@@ -46,6 +46,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - name: The Android app's golden file of this code is up to date
+        run: node --experimental-strip-types ../tools/web_goldens.mjs --check
 
   android:
     runs-on: ubuntu-latest
