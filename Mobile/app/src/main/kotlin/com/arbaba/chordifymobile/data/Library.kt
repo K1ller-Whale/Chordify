@@ -6,12 +6,18 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
 import com.arbaba.chordifymobile.engine.analysis.AnalysisOptions
+import com.arbaba.chordifymobile.engine.audio.AudioSource
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
 import com.arbaba.chordifymobile.engine.model.parseAnalysisResult
 import com.arbaba.chordifymobile.engine.model.toJson
+import com.arbaba.chordifymobile.playback.decodePeaks
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
+import java.io.DataInputStream
+import java.io.DataOutputStream
 import java.io.File
 import java.io.InputStream
 import java.security.MessageDigest
@@ -63,6 +69,7 @@ class Library(
         val same = sha256(uri) == row.sha256
         val (fileUri, owns) = keep(uri, id, displayNameOf(uri))
         if (row.ownsFile && row.fileUri != fileUri.toString()) Uri.parse(row.fileUri).path?.let { File(it).delete() }
+        peaksFile(id).delete() // the waveform is the new file's
         dao.setFile(id, fileUri.toString(), owns)
         same
     }
@@ -108,6 +115,7 @@ class Library(
         jobs.cancel(id)
         dao.delete(id)
         resultFile(id).delete()
+        peaksFile(id).delete()
         if (row.ownsFile) Uri.parse(row.fileUri).path?.let { File(it).delete() }
     }
 
@@ -134,6 +142,32 @@ class Library(
     }
 
     fun resultFile(id: String): File = File(resultsDir, "$id.json")
+
+    /** The waveform of the analysis's file (lib/audio.ts waveformPeaks), made the first time it is
+     *  asked for and kept next to the result; null when the file cannot be read. */
+    suspend fun peaks(analysis: Analysis, duration: Double): FloatArray? = withContext(Dispatchers.IO) {
+        val file = peaksFile(analysis.id)
+        if (file.exists()) return@withContext DataInputStream(file.inputStream().buffered()).use { input ->
+            FloatArray(input.readInt()) { input.readFloat() }
+        }
+        val peaks = try {
+            decodePeaks(AudioSource.FromUri(context, Uri.parse(analysis.fileUri)), duration) { !isActive }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            return@withContext null
+        }
+        resultsDir.mkdirs()
+        val partial = File(resultsDir, "${analysis.id}.peaks.part")
+        DataOutputStream(partial.outputStream().buffered()).use { output ->
+            output.writeInt(peaks.size)
+            peaks.forEach { output.writeFloat(it) }
+        }
+        partial.renameTo(file)
+        peaks
+    }
+
+    fun peaksFile(id: String): File = File(resultsDir, "$id.peaks")
 
     // -- files ----------------------------------------------------------------------------------
 
