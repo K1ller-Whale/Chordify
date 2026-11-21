@@ -1,5 +1,12 @@
 package com.arbaba.chordifymobile.ui.settings
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsNotSelected
@@ -26,10 +33,10 @@ class SettingsScreenTest {
 
     private val storage = "2 analyses · 1.0 MB of results, recordings and copied files"
 
-    private fun settings(size: DpSize, onMajorMinorOnly: (Boolean) -> Unit = {}, onScreen: (ScreenOrientation) -> Unit = {},
+    private fun settings(size: DpSize, screen: ScreenOrientation = ScreenOrientation.LANDSCAPE, onMajorMinorOnly: (Boolean) -> Unit = {}, onScreen: (ScreenOrientation) -> Unit = {},
                          onAbout: () -> Unit = {}, onBack: () -> Unit = {}) =
         rule.show(size) {
-            SettingsContent(false, onMajorMinorOnly, ScreenOrientation.LANDSCAPE, onScreen, storage, onAbout, onBack)
+            SettingsContent(false, onMajorMinorOnly, screen, onScreen, storage, onAbout, onBack)
         }
 
     private fun about(size: DpSize, onSource: () -> Unit = {}, onBack: () -> Unit = {}) =
@@ -42,14 +49,39 @@ class SettingsScreenTest {
         assertEquals(true, got)
     }
 
-    @Test fun screenChoice() {
-        var got: ScreenOrientation? = null
-        settings(LANDSCAPE, onScreen = { got = it })
-        rule.onNodeWithTag("screen-LANDSCAPE").assertIsSelected()
-        rule.onNodeWithTag("screen-PORTRAIT").assertIsNotSelected()
+    @Test fun screenChoiceFollowsTheSetting() {
+        var screen by mutableStateOf(ScreenOrientation.LANDSCAPE)
+        rule.show(LANDSCAPE) {
+            SettingsContent(false, {}, screen, { screen = it }, storage, {}, {})
+        }
+        fun assertOnly(selected: ScreenOrientation) {
+            for (o in ScreenOrientation.entries) {
+                val node = rule.onNodeWithTag("screen-${o.name}")
+                if (o == selected) node.assertIsSelected() else node.assertIsNotSelected()
+            }
+        }
+        assertOnly(ScreenOrientation.LANDSCAPE)
         rule.onNodeWithText("Follow the phone").assertExists()
-        rule.onNodeWithText("Portrait").performClick()
-        assertEquals(ScreenOrientation.PORTRAIT, got)
+        rule.onNodeWithTag("screen-PORTRAIT").performClick()
+        assertEquals(ScreenOrientation.PORTRAIT, screen)
+        assertOnly(ScreenOrientation.PORTRAIT)
+        rule.onNodeWithTag("screen-FOLLOW_PHONE").performClick()
+        assertOnly(ScreenOrientation.FOLLOW_PHONE)
+    }
+
+    @Test fun screenChoiceShowsThePassedValue() {
+        settings(PORTRAIT, screen = ScreenOrientation.FOLLOW_PHONE)
+        rule.onNodeWithTag("screen-FOLLOW_PHONE").assertIsSelected()
+        rule.onNodeWithTag("screen-LANDSCAPE").assertIsNotSelected()
+        rule.onNodeWithTag("screen-PORTRAIT").assertIsNotSelected()
+    }
+
+    @Test fun screenChoiceIsOneRadioGroup() {
+        settings(LANDSCAPE)
+        for (o in ScreenOrientation.entries) {
+            rule.onNodeWithTag("screen-${o.name}").assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton))
+        }
+        rule.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.SelectableGroup)).assertExists()
     }
 
     @Test fun storageAboutAndBack() {
