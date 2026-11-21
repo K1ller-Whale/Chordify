@@ -14,11 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -49,7 +45,10 @@ import com.arbaba.chordifymobile.ChordifyApp
 import com.arbaba.chordifymobile.engine.EngineException
 import com.arbaba.chordifymobile.engine.audio.AudioSource
 import com.arbaba.chordifymobile.record.Recorder
-import com.arbaba.chordifymobile.ui.analysis.CardTitle
+import com.arbaba.chordifymobile.ui.AdaptiveLayout
+import com.arbaba.chordifymobile.ui.ScreenTopBar
+import com.arbaba.chordifymobile.ui.SectionTitle
+import com.arbaba.chordifymobile.ui.TwoPanes
 import com.arbaba.chordifymobile.ui.analysis.GuitarDiagram
 import com.arbaba.chordifymobile.ui.analysis.percent
 import com.arbaba.chordifymobile.ui.library.MICROPHONE_REFUSED
@@ -161,6 +160,7 @@ fun QuickChordScreen(onBack: () -> Unit = {}, model: QuickChordViewModel = viewM
             }
         },
         onPick = { pick.launch(arrayOf("audio/*")) },
+        onBack = onBack,
         onOpenAppSettings = if (refused) {
             {
                 context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
@@ -170,49 +170,52 @@ fun QuickChordScreen(onBack: () -> Unit = {}, model: QuickChordViewModel = viewM
     )
 }
 
-/** Quick chord without its view model, so tests can show it in any state. */
+/** Quick chord without its view model, so tests can show it in any state: a top bar with Back, then the
+ *  recording controls on one half and the chord found on the other (stacked in portrait). */
 @Composable
 fun QuickChordContent(state: QuickState, result: QuickResult?, error: String?, onRecord: () -> Unit, onPick: () -> Unit,
-                      onOpenAppSettings: (() -> Unit)? = null) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                CardTitle("Quick chord")
-                Text("Strum one chord for two or three seconds. Recording stops by itself after ${RECORD_SECONDS.toInt()} s.")
-                Button(onClick = onRecord, enabled = state != QuickState.Working, modifier = Modifier.testTag("recordChord")) {
-                    Text(when (state) {
-                        is QuickState.Recording -> "Stop"
-                        QuickState.Working -> "Listening…"
-                        QuickState.Idle -> "Record a chord"
-                    })
-                }
-                if (state is QuickState.Recording) {
-                    LinearProgressIndicator(progress = { min(1f, state.level * 4) },
-                                            modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Input level" })
-                    Text(String.format(java.util.Locale.ROOT, "%.1f s", state.seconds), style = MaterialTheme.typography.bodySmall)
-                }
-                OutlinedButton(onClick = onPick, enabled = state == QuickState.Idle) { Text("Or pick a short clip") }
-                if (error != null) {
-                    Text(error, color = MaterialTheme.colorScheme.error)
-                    if (onOpenAppSettings != null) TextButton(onClick = onOpenAppSettings) { Text("Open the app's settings") }
-                }
-            }
-        }
-        Card(Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite }) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CardTitle("Result")
-                if (result == null) {
-                    Text("Your chord will appear here.", style = MaterialTheme.typography.bodySmall)
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(result.name, fontSize = 48.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("quickName"))
-                            Text("Confidence ${percent(result.confidence)}%", style = MaterialTheme.typography.bodySmall)
-                        }
-                        chordShape(result.label)?.let { GuitarDiagram(it, 0, width = 96.dp) }
+                      onOpenAppSettings: (() -> Unit)? = null, onBack: () -> Unit = {}) {
+    Column(Modifier.fillMaxSize()) {
+        ScreenTopBar("Quick chord", onBack)
+        AdaptiveLayout(Modifier.weight(1f).fillMaxWidth()) { landscape ->
+            TwoPanes(landscape, Modifier.fillMaxSize(), first = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Strum one chord for two or three seconds.")
+                    Button(onClick = onRecord, enabled = state != QuickState.Working, modifier = Modifier.testTag("recordChord")) {
+                        Text(when (state) {
+                            is QuickState.Recording -> "Stop"
+                            QuickState.Working -> "Listening…"
+                            QuickState.Idle -> "Record a chord"
+                        })
+                    }
+                    if (state is QuickState.Recording) {
+                        LinearProgressIndicator(progress = { min(1f, state.level * 4) },
+                                                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Input level" })
+                        Text(String.format(java.util.Locale.ROOT, "%.1f s", state.seconds), style = MaterialTheme.typography.bodySmall)
+                    }
+                    OutlinedButton(onClick = onPick, enabled = state == QuickState.Idle) { Text("Or pick a short clip") }
+                    if (error != null) {
+                        Text(error, color = MaterialTheme.colorScheme.error)
+                        if (onOpenAppSettings != null) TextButton(onClick = onOpenAppSettings) { Text("Open the app's settings") }
                     }
                 }
-            }
+            }, second = {
+                Column(Modifier.fillMaxWidth().semantics { liveRegion = LiveRegionMode.Polite },
+                       verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SectionTitle("Result")
+                    if (result == null) {
+                        Text("Your chord will appear here.", style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(result.name, fontSize = 48.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("quickName"))
+                                Text("Confidence ${percent(result.confidence)}%", style = MaterialTheme.typography.bodySmall)
+                            }
+                            chordShape(result.label)?.let { GuitarDiagram(it, 0, width = 96.dp) }
+                        }
+                    }
+                }
+            })
         }
     }
 }
