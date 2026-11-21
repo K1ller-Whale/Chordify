@@ -47,6 +47,7 @@ android {
         }
     }
     testOptions {
+        unitTests.includeAndroidResources = true
         managedDevices {
             localDevices {
                 create('api34') {
@@ -92,6 +93,10 @@ dependencies {
 
     testImplementation libs.junit
     testImplementation libs.kotlinx.serialization.json
+    testImplementation libs.robolectric
+    testImplementation libs.ext.junit
+    testImplementation platform(libs.compose.bom)
+    testImplementation libs.compose.ui.test.junit4
     androidTestImplementation libs.junit
     androidTestImplementation libs.ext.junit
     androidTestImplementation libs.androidx.test.runner
