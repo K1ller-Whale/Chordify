@@ -69,8 +69,6 @@ import kotlin.math.sqrt
 // The timeline (Timeline.tsx): the whole song as an overview strip, and a detail track that
 // moves under a fixed playhead. Sizes are the web's, in dp.
 
-/** dp per second on the detail track. */
-const val PIXELS_PER_SECOND = 70f
 private const val HEIGHT = 196f
 private const val SEC_Y = 6f
 private const val SEC_H = 22f
@@ -212,19 +210,6 @@ private fun Detail(result: AnalysisResult, clock: PlaybackClock, time: State<Dou
 /** Text whose baseline is at [baseline]. */
 private fun DrawScope.text(layout: TextLayoutResult, color: Color, x: Float, baseline: Float) =
     drawText(layout, color, Offset(x, baseline - layout.firstBaseline))
-
-/** The web's #hatch pattern: 2-wide stripes every 6, at 45°, for chords outside the key. */
-private fun DrawScope.hatch(color: Color, x: Float, top: Float, w: Float, h: Float, spacing: Float, alpha: Float) {
-    val shape = Path().apply { addRoundRect(RoundRect(x, top, x + w, top + h, CornerRadius(6 * density))) }
-    clipPath(shape) {
-        val step = spacing * sqrt(2f)
-        var d = -h
-        while (d < w) {
-            drawLine(color, Offset(x + d, top + h), Offset(x + d + h, top), 2 * density, alpha = alpha)
-            d += step
-        }
-    }
-}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

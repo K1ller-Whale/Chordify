@@ -8,6 +8,7 @@ import com.arbaba.chordifymobile.music.Notation
 import com.arbaba.chordifymobile.music.Shape
 import com.arbaba.chordifymobile.music.chordName
 import com.arbaba.chordifymobile.music.isNoChord
+import com.arbaba.chordifymobile.music.formatTime
 import com.arbaba.chordifymobile.music.shapeKey
 import java.util.Locale
 import kotlin.math.roundToLong
@@ -82,5 +83,45 @@ fun diagramDescription(shape: Shape?, capo: Int): String =
     else "Guitar chord diagram, frets ${shape.joinToString(" ") { if (it < 0) "x" else "$it" }}" +
         if (capo > 0) ", counted from a capo on fret $capo" else ""
 
-const val FILE_MISSING ="The audio file is not where it was. Pick it again to play along; until then the chords run silently."
+const val FILE_MISSING = "No audio for this song: the chords run silently."
 const val FILE_MISMATCH = "This file is not the one that was analysed, so chords may not line up."
+
+/** "vi · Tonic" (LETTERS: chord.roman; ROMAN: chord.display; then FUNCTION_NAMES[chord.function]);
+ *  "No chord" for N/X; null when it has neither a numeral nor a function. */
+fun theoryLine(chord: ChordSegment, notation: Notation): String? {
+    if (isNoChord(chord.label)) return "No chord"
+    val numeral = if (notation == Notation.LETTERS) chord.roman else chord.display
+    val parts = listOfNotNull(numeral, FUNCTION_NAMES[chord.function])
+    return if (parts.isEmpty()) null else parts.joinToString(" · ")
+}
+
+/** "Capo 2 · sounds as F#m" when capo > 0, the chord is not N/X and sounding != null; else null. */
+fun soundsAsLine(chord: ChordSegment, capo: Int, sounding: String?): String? =
+    if (capo > 0 && !isNoChord(chord.label) && sounding != null) "Capo $capo · sounds as $sounding" else null
+
+/** "Capo: none" or "Capo: fret 2". */
+fun capoLabel(capo: Int): String = if (capo == 0) "Capo: none" else "Capo: fret $capo"
+
+/** "none", "fret 3", or "fret 2  ★ 100% open chords" for the suggested fret (suggestion.capo > 0). */
+fun capoMenuLabel(fret: Int, suggestion: CapoSuggestion): String = when {
+    fret == 0 -> "none"
+    suggestion.capo > 0 && fret == suggestion.capo -> "fret $fret  ★ ${percent(suggestion.open)}% open chords"
+    else -> "fret $fret"
+}
+
+/** "G major · 144 BPM · 4/4" (BPM rounded, left out when null); the song's real key. */
+fun songFacts(analysed: AnalysisResult): String {
+    val key = analysed.key.global
+    val tempo = analysed.tempo
+    return listOfNotNull("${key.tonic} ${key.mode}", tempo.bpm?.let { "${Math.round(it)} BPM" }, tempo.meter).joinToString(" · ")
+}
+
+/** songFacts + " · 4:16 · 9 chords" (formatTime of the duration; summary.uniqueChords). */
+fun songDetails(analysed: AnalysisResult): String =
+    songFacts(analysed) + " · ${formatTime(analysed.source.duration)} · ${analysed.summary.uniqueChords} chords"
+
+/** "0.5×", "0.75×", "1×", "1.25×". */
+fun speedLabel(rate: Double): String {
+    val text = String.format(Locale.ROOT, "%.2f", rate).trimEnd('0').trimEnd('.')
+    return "$text×"
+}
