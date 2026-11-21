@@ -8,6 +8,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.layout.onSizeChanged
@@ -63,16 +67,25 @@ class RobolectricSmokeTest {
         assertNotNull(runCatching { rule.assertAnnounced() }.exceptionOrNull())
     }
 
-    @Test fun forcedSizeTakesEffect() {
-        var seen: DpSize? = null
-        rule.show(PORTRAIT) {
-            val density = LocalDensity.current
-            Box(Modifier.fillMaxSize().onSizeChanged { seen = with(density) { DpSize(it.width.toDp(), it.height.toDp()) } })
+    private fun assertForcedSize(size: DpSize) {
+        rule.show(size) { Box(Modifier.fillMaxSize().testTag("fill")) }
+        val bounds = rule.onNodeWithTag("fill").getUnclippedBoundsInRoot()
+        // Whole pixels, so allow one pixel of rounding. The window itself is larger (robolectric.properties).
+        assertEquals(size.width.value, (bounds.right - bounds.left).value, 1f)
+        assertEquals(size.height.value, (bounds.bottom - bounds.top).value, 1f)
+    }
+
+    @Test fun forcedSizeTakesEffectInPortrait() = assertForcedSize(PORTRAIT)
+
+    @Test fun forcedSizeTakesEffectInLandscape() = assertForcedSize(LANDSCAPE)
+
+    @Test fun theFarRightOfLandscapeIsDisplayed() {
+        rule.show(LANDSCAPE) {
+            Box(Modifier.fillMaxSize()) {
+                Box(Modifier.align(Alignment.CenterEnd).size(40.dp).testTag("farRight"))
+            }
         }
-        rule.waitForIdle()
-        // Whole pixels, so allow one pixel of rounding.
-        assertEquals(PORTRAIT.width.value, seen!!.width.value, 1f)
-        assertEquals(PORTRAIT.height.value, seen!!.height.value, 1f)
+        rule.onNodeWithTag("farRight").assertIsDisplayed()
     }
 
     @Test fun loadsTheGoldenFixture() {
