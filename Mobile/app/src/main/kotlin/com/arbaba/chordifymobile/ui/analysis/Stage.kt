@@ -58,14 +58,24 @@ fun Stage(chord: ChordSegment, notation: Notation, capo: Int, sounding: String?,
             if (abs(moved) > 48.dp.toPx()) onSwipe(if (moved < 0) 1 else -1)
         }) { _, dx -> moved += dx }
     }
-    Box(modifier.fillMaxSize().then(swipe).testTag("stage").semantics { liveRegion = LiveRegionMode.Polite },
-        contentAlignment = Alignment.Center) {
+    Box(modifier.fillMaxSize().then(swipe).testTag("stage"), contentAlignment = Alignment.Center) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(chordName(chord, notation), fontSize = 64.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("nowName"))
+                Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    // Only the name and its two lines are announced when the chord changes; the badge,
+                    // its text and the diagram stay outside this live region.
+                    Column(Modifier.semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite }
+                        .testTag("announce"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(chordName(chord, notation), fontSize = 64.sp, fontWeight = FontWeight.Bold, modifier = Modifier.testTag("nowName"))
+                        theoryLine(chord, notation)?.let {
+                            Text(it, style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.testTag("theoryLine"))
+                        }
+                        soundsAsLine(chord, capo, sounding)?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.testTag("soundsAs"))
+                        }
+                    }
                     if (doubt != null) {
-                        Box(Modifier.size(28.dp).border(1.dp, muted, CircleShape).clickable { showDoubt = !showDoubt }
+                        Box(Modifier.padding(top = 20.dp).size(28.dp).border(1.dp, muted, CircleShape).clickable { showDoubt = !showDoubt }
                             .testTag("unsure")
                             .clearAndSetSemantics {
                                 contentDescription = "Show other possible chords"
@@ -76,12 +86,6 @@ fun Stage(chord: ChordSegment, notation: Notation, capo: Int, sounding: String?,
                             Text("?", style = MaterialTheme.typography.labelLarge, color = muted)
                         }
                     }
-                }
-                theoryLine(chord, notation)?.let {
-                    Text(it, style = MaterialTheme.typography.bodyMedium, color = muted, modifier = Modifier.testTag("theoryLine"))
-                }
-                soundsAsLine(chord, capo, sounding)?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.testTag("soundsAs"))
                 }
                 if (doubt != null && showDoubt) {
                     Text(doubt, style = MaterialTheme.typography.bodySmall, modifier = Modifier.testTag("unsureText"))

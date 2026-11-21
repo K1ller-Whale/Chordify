@@ -23,6 +23,7 @@ import com.arbaba.chordifymobile.ui.assertAnnounced
 import com.arbaba.chordifymobile.ui.assertEveryControlNamed
 import com.arbaba.chordifymobile.ui.show
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -42,8 +43,8 @@ class StageTest {
 
     private fun names(size: DpSize) {
         rule.show(size) { Stage(c, Notation.LETTERS, 0, null, {}) }
-        rule.onNodeWithTag("nowName").assertTextEquals("C")
-        rule.onNodeWithTag("theoryLine").assertTextEquals("I · Tonic")
+        rule.onNodeWithTag("nowName", useUnmergedTree = true).assertTextEquals("C")
+        rule.onNodeWithTag("theoryLine", useUnmergedTree = true).assertTextEquals("I · Tonic")
         rule.onAllNodes(SemanticsMatcher("soundsAs") { it.config.getOrNull(SemanticsProperties.TestTag) == "soundsAs" }).assertCountEquals(0)
         diagrams().assertCountEquals(1)
         rule.assertEveryControlNamed()
@@ -55,12 +56,12 @@ class StageTest {
 
     @Test fun romanName() {
         rule.show { Stage(c, Notation.ROMAN, 0, null, {}) }
-        rule.onNodeWithTag("nowName").assertTextEquals("I")
+        rule.onNodeWithTag("nowName", useUnmergedTree = true).assertTextEquals("I")
     }
 
     private fun capo(size: DpSize) {
         rule.show(size) { Stage(c, Notation.LETTERS, 5, "C", {}) }
-        rule.onNodeWithTag("soundsAs").assertTextEquals("Capo 5 · sounds as C")
+        rule.onNodeWithTag("soundsAs", useUnmergedTree = true).assertTextEquals("Capo 5 · sounds as C")
     }
 
     @Test fun capoLandscape() = capo(LANDSCAPE)
@@ -85,8 +86,8 @@ class StageTest {
     private fun noChord(size: DpSize) {
         val nc = Fixtures.sevenths.chords[4]
         rule.show(size) { Stage(nc, Notation.LETTERS, 2, "C", {}) }
-        rule.onNodeWithTag("nowName").assertTextEquals("N.C.")
-        rule.onNodeWithTag("theoryLine").assertTextEquals("No chord")
+        rule.onNodeWithTag("nowName", useUnmergedTree = true).assertTextEquals("N.C.")
+        rule.onNodeWithTag("theoryLine", useUnmergedTree = true).assertTextEquals("No chord")
         diagrams().assertCountEquals(0)
     }
 
@@ -103,4 +104,15 @@ class StageTest {
 
     @Test fun swipeLandscape() = swipes(LANDSCAPE)
     @Test fun swipePortrait() = swipes(PORTRAIT)
+
+    @Test fun announcesOnlyTheChordAndItsLines() {
+        rule.show { Stage(unsureChord, Notation.LETTERS, 5, "C", {}) }
+        rule.onNodeWithTag("unsure").performClick()
+        val live = rule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion)).fetchSemanticsNodes()
+        assertEquals(1, live.size)
+        val spoken = live[0].config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString(" ") { it.text }
+        assertTrue(spoken, "C" in spoken && "I \u00b7 Tonic" in spoken && "Capo 5 \u00b7 sounds as C" in spoken)
+        assertTrue(spoken, "Unsure" !in spoken && "Guitar" !in spoken)
+        assertTrue(live[0].config.getOrNull(SemanticsProperties.ContentDescription).orEmpty().none { it.startsWith("Guitar") })
+    }
 }
