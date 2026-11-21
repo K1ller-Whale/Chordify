@@ -2,6 +2,7 @@ package com.arbaba.chordifymobile.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.DeviceConfigurationOverride
@@ -53,11 +54,20 @@ fun ComposeContentTestRule.assertEveryControlNamed() {
         val description = node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString("")
         text.isNullOrBlank() && description.isNullOrBlank()
     }
-    check(unnamed.isEmpty()) { "Controls without a name: ${unnamed.map { it.id }}" }
+    check(unnamed.isEmpty()) {
+        "Controls without a name (no text, no content description): " +
+            unnamed.joinToString("; ") { describeNode(it) }
+    }
 }
 
 /** At least one node is a live region (SemanticsProperties.LiveRegion). */
 fun ComposeContentTestRule.assertAnnounced() {
     val live = onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion)).fetchSemanticsNodes()
-    check(live.isNotEmpty()) { "No live region on screen" }
+    check(live.isNotEmpty()) {
+        "No live region on screen. Nodes: " + onAllNodes(SemanticsMatcher("any") { true }).fetchSemanticsNodes().joinToString("; ") { describeNode(it) }
+    }
 }
+
+/** Test tag, bounds and semantics of a node, for failure messages. */
+private fun describeNode(node: SemanticsNode): String =
+    "[tag=${node.config.getOrNull(SemanticsProperties.TestTag)} bounds=${node.boundsInRoot} config=${node.config}]"
