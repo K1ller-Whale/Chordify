@@ -158,7 +158,7 @@ Existing panels in `APP/ui/analysis/Panels.kt` get a `modifier` parameter (T0b a
 
 ### C5. Constants and pure helpers (T0b, real code with JVM tests)
 
-In `APP/ui/analysis/Charts.kt` (moved there from `Timeline.kt`): `const val PIXELS_PER_SECOND = 70f` (dp per second of the strip). Already in `Charts.kt` and unchanged: `PLAYHEAD = 0.33f`, `detailSeek(time, x, width, pixelsPerSecond)`, `overviewSeek(x, width, duration)`, `chordStep(starts, t, delta)`, `barIndexAt(barStarts, t)`, `surprisingChords(chords)`, `circleNodes`, `circleTransitions`, `circleDescription`.
+In `APP/ui/analysis/Charts.kt` (moved there from `Timeline.kt`): `const val PIXELS_PER_SECOND = 70f` (dp per second of the strip), and `internal fun DrawScope.hatch(color: Color, x: Float, top: Float, w: Float, h: Float, spacing: Float, alpha: Float)` (the diagonal stripes for chords outside the key, moved unchanged from `Timeline.kt`, where it was private; used by the strip and the Song panel's legend). Already in `Charts.kt` and unchanged: `PLAYHEAD = 0.33f`, `detailSeek(time, x, width, pixelsPerSecond)`, `overviewSeek(x, width, duration)`, `chordStep(starts, t, delta)`, `barIndexAt(barStarts, t)`, `surprisingChords(chords)`, `circleNodes`, `circleTransitions`, `circleDescription`.
 
 In `APP/ui/analysis/AnalysisText.kt` (new or changed):
 
@@ -280,7 +280,7 @@ fun ComposeContentTestRule.assertAnnounced()
   - Stub bodies are an empty block `{}`. They must compile, take exactly the C4 signatures, and carry the KDoc from C4.
 - **Files:**
   - Create: `APP/ui/analysis/PanelTab.kt`, `Stage.kt`, `ChordStrip.kt`, `TransportBar.kt`, `ChordPanel.kt`, `SongPanel.kt`, `AnalysisTopBar.kt`, `NoAudioBanner.kt` (all in `APP/ui/analysis/`).
-  - Modify: `APP/ui/analysis/Panels.kt` (only add the `modifier` parameters of C4; apply `modifier` to each function's outermost element; nothing else changes), `APP/ui/analysis/Charts.kt` (add `PIXELS_PER_SECOND`), `APP/ui/analysis/Timeline.kt` (remove its `PIXELS_PER_SECOND` declaration), `APP/ui/analysis/AnalysisText.kt`, `JT/ui/analysis/AnalysisTextTest.kt`.
+  - Modify: `APP/ui/analysis/Panels.kt` (only add the `modifier` parameters of C4; apply `modifier` to each function's outermost element; nothing else changes), `APP/ui/analysis/Charts.kt` (add `PIXELS_PER_SECOND` and `hatch`), `APP/ui/analysis/Timeline.kt` (remove its `PIXELS_PER_SECOND` declaration and its private `hatch`, which it now gets from `Charts.kt`), `APP/ui/analysis/AnalysisText.kt`, `JT/ui/analysis/AnalysisTextTest.kt`.
 - **Contracts provided:** C4 (stubs and `PanelTab`), C5.
 - **Steps:**
   - [ ] Write the JVM tests first in `AnalysisTextTest.kt`, using `Fixtures`-free data (the test's existing `loop` from `WebGoldens`):
@@ -295,7 +295,7 @@ fun ComposeContentTestRule.assertAnnounced()
     - `speedLabel(0.5) == "0.5×"`, `speedLabel(1.0) == "1×"`, `speedLabel(1.25) == "1.25×"`.
   - [ ] Run them and see them fail to compile.
   - [ ] Implement the C5 functions in `AnalysisText.kt`, and change `FILE_MISSING`'s text.
-  - [ ] Move `PIXELS_PER_SECOND` to `Charts.kt`.
+  - [ ] Move `PIXELS_PER_SECOND` and `DrawScope.hatch` (made `internal`, body unchanged) to `Charts.kt`.
   - [ ] Add the `modifier` parameters to `Panels.kt`.
   - [ ] Write the eight new files with the C4 signatures, stub bodies and `PanelTab`.
 - **Done when:** `./gradlew :app:testDebugUnitTest --tests 'com.arbaba.chordifymobile.ui.analysis.AnalysisTextTest'` passes and `./gradlew :app:compileDebugKotlin` succeeds. Commit: "Add the M7 analysis contracts: stubs, panel modifiers and text helpers".
@@ -375,7 +375,7 @@ fun ComposeContentTestRule.assertAnnounced()
     - function colours, the active chord solid and the others tinted; stripes for chords outside the key; a fainter block for low confidence; ✦ on surprising changes;
     - beat and downbeat lines; the waveform, faint, behind;
     - tap or drag to seek.
-  - Today's implementation to adapt is `private fun Detail` in `APP/ui/analysis/Timeline.kt`, with its helpers `text` and `hatch` (copy them as private functions into `ChordStrip.kt`; `Timeline.kt` is deleted later by I1).
+  - Today's implementation to adapt is `private fun Detail` in `APP/ui/analysis/Timeline.kt`, with its helper `text` (copy it as a private function into `ChordStrip.kt`; `Timeline.kt` is deleted later by I1). For the stripes call the shared `DrawScope.hatch` in `Charts.kt` (C5); do not copy it.
   - Geometry, in dp:
     - beat lines and downbeat lines (`outline` colour) span the full height;
     - section starts are 2 dp-wide `onSurfaceVariant` markers;
@@ -450,7 +450,7 @@ fun ComposeContentTestRule.assertAnnounced()
   - Spec §3.6, Song:
     - *This song*: `songDetails(analysed)`;
     - *Capo*: `capoNotice(analysed, capo)` when not null, and `suggestionNotice(suggestion, capo)` when not null; when both are null, "No capo needed: the shapes are the song's own." Note that `suggestionNotice` returns null when the capo is already the suggested one;
-    - *Colours*: a legend of small swatches: Tonic, Subdominant, Dominant, "Outside the key" (hatched in `borrowed`), "✦ Surprising change" (today's `Legend` in `Timeline.kt`);
+    - *Colours*: a legend of small swatches: Tonic, Subdominant, Dominant, "Outside the key" (hatched in `borrowed`), "✦ Surprising change" (today's `Legend` in `Timeline.kt`; draw the hatched swatch with the shared `DrawScope.hatch` from `Charts.kt` (C5), do not copy it);
     - *Models*: `result.models` as "chord chordnet-chroma@3.0.0" lines;
     - *Keyboard*: "Space plays or pauses, ← and → jump between chords, R toggles Roman numerals."
   - Both are plain sections with `SectionTitle` headings (C3), no Card. Each is a `Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp))`.
