@@ -2,36 +2,42 @@ package com.arbaba.chordifymobile
 
 import android.content.Intent
 import android.net.Uri
-import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
+import android.content.pm.ActivityInfo
+import androidx.test.core.app.ActivityScenario
+import androidx.test.platform.app.InstrumentationRegistry
+import com.arbaba.chordifymobile.data.ScreenOrientation
+import kotlinx.coroutines.runBlocking
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class MainActivityTest {
-    @get:Rule
-    val compose = createAndroidComposeRule<MainActivity>()
-
     @Test
-    fun theFourTabsOpenTheirScreens() {
-        compose.onNodeWithText("Pick a file").assertIsDisplayed()
-        compose.onNodeWithText("Quick chord").performClick()
-        compose.onNodeWithText("Record a chord").assertIsDisplayed()
-        compose.onNodeWithText("Songwriter").performClick()
-        compose.onNodeWithText("Suggest the next chord").assertIsDisplayed()
-        compose.onNodeWithText("Settings").performClick()
-        compose.onNodeWithText("Major and minor chords only").assertIsDisplayed()
-        compose.onNodeWithText("About Chordify").performClick()
-        compose.onNodeWithText("Source code").assertIsDisplayed()
-        compose.onNodeWithText("Settings").performClick()
-        compose.onNodeWithText("Library").performClick()
-        compose.onNodeWithText("Pick a file").assertIsDisplayed()
+    fun theScreenSettingSetsTheOrientation() {
+        val settings = (InstrumentationRegistry.getInstrumentation().targetContext.applicationContext as ChordifyApp).container.settings
+        try {
+            runBlocking { settings.setScreenOrientation(ScreenOrientation.PORTRAIT) }
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT, orientationOf(scenario))
+                runBlocking { settings.setScreenOrientation(ScreenOrientation.LANDSCAPE) }
+                val deadline = System.currentTimeMillis() + 5_000
+                while (orientationOf(scenario) != ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE && System.currentTimeMillis() < deadline) {
+                    Thread.sleep(100)
+                }
+                assertEquals(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE, orientationOf(scenario))
+            }
+        } finally {
+            runBlocking { settings.setScreenOrientation(ScreenOrientation.LANDSCAPE) }
+        }
+    }
+
+    private fun orientationOf(scenario: ActivityScenario<MainActivity>): Int {
+        var value = -1
+        scenario.onActivity { value = it.requestedOrientation }
+        return value
     }
 
     @Test
