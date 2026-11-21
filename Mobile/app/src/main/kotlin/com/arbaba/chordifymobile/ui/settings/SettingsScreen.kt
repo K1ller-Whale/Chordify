@@ -67,7 +67,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
 /** The Settings tab: the analysis default, the space the library takes, and About. */
 @Composable
-fun SettingsScreen(onAbout: () -> Unit, model: SettingsViewModel = viewModel()) {
+fun SettingsScreen(onAbout: () -> Unit, onBack: () -> Unit = {}, model: SettingsViewModel = viewModel()) {
     val majorMinorOnly by model.majorMinorOnly.collectAsStateWithLifecycle()
     val storage by model.storage.collectAsStateWithLifecycle()
     SettingsContent(majorMinorOnly, model::setMajorMinorOnly, storage, onAbout)
@@ -109,7 +109,7 @@ fun SettingsContent(majorMinorOnly: Boolean, onMajorMinorOnly: (Boolean) -> Unit
 
 /** About (spec §6.2): licence, source, third-party notices and dataset credits. */
 @Composable
-fun AboutScreen() {
+fun AboutScreen(onBack: () -> Unit = {}) {
     val context = LocalContext.current
     val container = (context.applicationContext as ChordifyApp).container
     val version = context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()

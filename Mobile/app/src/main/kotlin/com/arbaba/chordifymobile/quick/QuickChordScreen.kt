@@ -135,7 +135,7 @@ class QuickChordViewModel(application: Application) : AndroidViewModel(applicati
 
 /** The Quick chord tab (spec §6.2). */
 @Composable
-fun QuickChordScreen(model: QuickChordViewModel = viewModel()) {
+fun QuickChordScreen(onBack: () -> Unit = {}, model: QuickChordViewModel = viewModel()) {
     val context = LocalContext.current
     val state by model.state.collectAsStateWithLifecycle()
     val result by model.result.collectAsStateWithLifecycle()

@@ -84,7 +84,7 @@ import kotlin.math.roundToInt
 
 /** The analysis screen (spec §6.2), opened from the Library. */
 @Composable
-fun AnalysisScreen(id: String) {
+fun AnalysisScreen(id: String, onBack: () -> Unit = {}) {
     val application = LocalContext.current.applicationContext as Application
     val model: AnalysisViewModel = viewModel(key = id) { AnalysisViewModel(application, id) }
     val row by model.analysis.collectAsStateWithLifecycle()
