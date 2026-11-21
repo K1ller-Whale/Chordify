@@ -64,8 +64,9 @@ import kotlin.math.sqrt
 
 /** Four bars a row; the current bar is marked and kept in view, and a tap jumps to a bar. */
 @Composable
-fun LeadSheet(result: AnalysisResult, notation: Notation, currentBar: Int, onSeek: (Double) -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
+fun LeadSheet(result: AnalysisResult, notation: Notation, currentBar: Int, modifier: Modifier = Modifier,
+              onSeek: (Double) -> Unit) {
+    Card(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             CardTitle("Lead sheet")
             if (result.bars.isEmpty()) {
@@ -99,14 +100,14 @@ private const val RI = 88f
 
 /** The song's chords on the circle of fifths, as Panels.tsx draws it on a 340-unit square. */
 @Composable
-fun CircleOfFifths(result: AnalysisResult, current: ChordSegment) {
+fun CircleOfFifths(result: AnalysisResult, current: ChordSegment, modifier: Modifier = Modifier) {
     val colors = LocalChordifyColors.current
     val scheme = MaterialTheme.colorScheme
     val measurer = rememberTextMeasurer()
     val nodes = remember(result) { circleNodes(result) }
     val transitions = remember(result) { circleTransitions(result) }
     val description = circleDescription(result)
-    Card(Modifier.fillMaxWidth()) {
+    Card(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             CardTitle("Circle of fifths")
             Canvas(Modifier.align(Alignment.CenterHorizontally).widthIn(max = 340.dp).fillMaxWidth().aspectRatio(1f)
@@ -165,10 +166,10 @@ fun CircleOfFifths(result: AnalysisResult, current: ChordSegment) {
 
 /** Time per chord, the repeating progressions and the predictability (Panels.tsx ChordShare). */
 @Composable
-fun ChordShare(result: AnalysisResult, chordsByDisplay: Map<String, ChordSegment>) {
+fun ChordShare(result: AnalysisResult, chordsByDisplay: Map<String, ChordSegment>, modifier: Modifier = Modifier) {
     val colors = LocalChordifyColors.current
     val summary = result.summary
-    Card(Modifier.fillMaxWidth()) {
+    Card(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             CardTitle("Time per chord")
             val top = summary.timeShare.firstOrNull()?.share ?: 1.0

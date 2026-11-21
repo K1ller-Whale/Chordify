@@ -1,5 +1,12 @@
 package com.arbaba.chordifymobile.ui.analysis
 
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
 import com.arbaba.chordifymobile.engine.model.ChordSegment
 import com.arbaba.chordifymobile.music.MAJOR_CIRCLE
@@ -10,6 +17,7 @@ import com.arbaba.chordifymobile.music.isMinorQuality
 import com.arbaba.chordifymobile.music.isNoChord
 import com.arbaba.chordifymobile.music.noteToPc
 import kotlin.math.log2
+import kotlin.math.sqrt
 
 // The logic of the timeline and the panels (Timeline.tsx, Panels.tsx, AnalysisPage.tsx), apart
 // from their drawing.
@@ -80,3 +88,19 @@ fun circleTransitions(result: AnalysisResult): Map<Pair<String, String>, Int> {
 /** What a screen reader says for the circle, as the web's aria-label. */
 fun circleDescription(result: AnalysisResult): String =
     "The song's chords on the circle of fifths, key of ${result.key.global.tonic} ${result.key.global.mode}"
+
+/** dp per second on the detail track (the chord strip). */
+const val PIXELS_PER_SECOND = 70f
+
+/** The web's #hatch pattern: 2-wide stripes every 6, at 45°, for chords outside the key. */
+internal fun DrawScope.hatch(color: Color, x: Float, top: Float, w: Float, h: Float, spacing: Float, alpha: Float) {
+    val shape = Path().apply { addRoundRect(RoundRect(x, top, x + w, top + h, CornerRadius(6 * density))) }
+    clipPath(shape) {
+        val step = spacing * sqrt(2f)
+        var d = -h
+        while (d < w) {
+            drawLine(color, Offset(x + d, top + h), Offset(x + d + h, top), 2 * density, alpha = alpha)
+            d += step
+        }
+    }
+}
