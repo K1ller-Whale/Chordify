@@ -17,6 +17,9 @@ import com.arbaba.chordifymobile.ui.PORTRAIT
 import com.arbaba.chordifymobile.ui.assertEveryControlNamed
 import com.arbaba.chordifymobile.ui.show
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import androidx.compose.ui.unit.width
+import androidx.compose.ui.test.getBoundsInRoot
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,8 +37,9 @@ class AnalysisTopBarTest {
     private var picked = 0
     private var backed = 0
 
-    private fun show(size: DpSize = LANDSCAPE, capo: Int = 0, notation: Notation = Notation.LETTERS) = rule.show(size) {
-        AnalysisTopBar("loop.wav", loop, capo, suggestion, notation, onBack = { backed++ }, onCapo = { capos += it },
+    private fun show(size: DpSize = LANDSCAPE, capo: Int = 0, notation: Notation = Notation.LETTERS,
+                     title: String = "loop.wav") = rule.show(size) {
+        AnalysisTopBar(title, loop, capo, suggestion, notation, onBack = { backed++ }, onCapo = { capos += it },
             onNotation = { notations += it }, onExport = { exports += it }, onPickFile = { picked++ })
     }
 
@@ -108,6 +112,32 @@ class AnalysisTopBarTest {
         show(PORTRAIT)
         rule.onAllNodesWithTextCount(songFacts(loop), 0)
         rule.onNodeWithTag("more").assertIsDisplayed()
+    }
+
+    private val longTitle = "Sweet Home Alabama (live at the old theatre, 1974 remaster)"
+
+    private fun titleWidth(): Float =
+        rule.onNodeWithText(longTitle).getBoundsInRoot().width.value
+
+    @Test fun longTitleKeepsUsableWidthBesideKeyLineAt480dp() {
+        show(DpSize(480.dp, 360.dp), title = longTitle)
+        rule.onNodeWithText(songFacts(loop)).assertExists()
+        assertTrue("title width ${titleWidth()}dp", titleWidth() >= 96f)
+    }
+
+    @Test fun longTitleKeepsUsableWidthAt360dp() {
+        show(DpSize(360.dp, 360.dp), title = longTitle)
+        assertTrue("title width ${titleWidth()}dp", titleWidth() >= 96f)
+    }
+
+    @Test fun keyLineAppearsAt480dpNotAt479dp() {
+        show(DpSize(480.dp, 360.dp))
+        rule.onAllNodesWithTextCount(songFacts(loop), 1)
+    }
+
+    @Test fun keyLineAbsentAt479dp() {
+        show(DpSize(479.dp, 360.dp))
+        rule.onAllNodesWithTextCount(songFacts(loop), 0)
     }
 
     private fun androidx.compose.ui.test.junit4.ComposeContentTestRule.onAllNodesWithTextCount(text: String, n: Int) {

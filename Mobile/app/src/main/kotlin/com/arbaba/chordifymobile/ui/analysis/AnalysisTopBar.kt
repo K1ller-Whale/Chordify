@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.arbaba.chordifymobile.data.ExportFormat
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
@@ -42,8 +43,9 @@ fun AnalysisTopBar(title: String, analysed: AnalysisResult, capo: Int, suggestio
         val showFacts = maxWidth >= KEY_LINE_MIN_WIDTH
         ScreenTopBar(title, onBack) {
             if (showFacts) {
-                Text(songFacts(analysed), style = MaterialTheme.typography.bodySmall, maxLines = 1,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp))
+                Text(songFacts(analysed), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f, fill = false).padding(horizontal = 8.dp))
             }
             Box {
                 AssistChip(onClick = { choosingCapo = true }, label = { Text(capoLabel(capo) + " ▾") },
