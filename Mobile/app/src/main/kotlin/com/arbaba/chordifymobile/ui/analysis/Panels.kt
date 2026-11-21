@@ -8,18 +8,20 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -53,6 +55,7 @@ import com.arbaba.chordifymobile.music.circleIndex
 import com.arbaba.chordifymobile.music.functionHue
 import com.arbaba.chordifymobile.music.noteToPc
 import com.arbaba.chordifymobile.ui.LocalChordifyColors
+import com.arbaba.chordifymobile.ui.SectionTitle
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
@@ -62,33 +65,29 @@ import kotlin.math.sqrt
 // The panels below the timeline (Panels.tsx): the lead sheet, the circle of fifths, and the time
 // per chord with the repeating progressions.
 
-/** Four bars a row; the current bar is marked and kept in view, and a tap jumps to a bar. */
+/** Four bars a row; the current bar is marked and kept in view, and a tap jumps to a bar. Fills [modifier]. */
 @Composable
 fun LeadSheet(result: AnalysisResult, notation: Notation, currentBar: Int, modifier: Modifier = Modifier,
               onSeek: (Double) -> Unit) {
-    Card(modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            CardTitle("Lead sheet")
-            if (result.bars.isEmpty()) {
-                Text("No steady beat was found, so there is no bar grid.", style = MaterialTheme.typography.bodySmall)
-                return@Column
-            }
-            val byDisplay = remember(result) { result.chords.associateBy { it.display } }
-            val grid = rememberLazyGridState()
-            LaunchedEffect(currentBar) {
-                if (currentBar >= 0) grid.animateScrollToItem(max(0, (currentBar / 4 - 2) * 4)) // the current row in the middle
-            }
-            LazyVerticalGrid(GridCells.Fixed(4), state = grid, modifier = Modifier.fillMaxWidth().height(260.dp).testTag("leadSheet")) {
-                itemsIndexed(result.bars) { i, bar ->
-                    val text = bar.chords.joinToString("  ") { if (notation == Notation.ROMAN) byDisplay[it]?.roman ?: it else it }.ifEmpty { "·" }
-                    val shape = RoundedCornerShape(6.dp)
-                    val cell = Modifier.padding(2.dp).clip(shape).clickable { onSeek(bar.start + 0.01) }.testTag("bar$i")
-                    Box(if (i == currentBar) cell.background(MaterialTheme.colorScheme.onSurface)
-                        else cell.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)) {
-                        Text(text, Modifier.padding(horizontal = 8.dp, vertical = 10.dp), fontWeight = FontWeight.SemiBold,
-                             color = if (i == currentBar) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurface)
-                    }
-                }
+    if (result.bars.isEmpty()) {
+        Text("No steady beat was found, so there is no bar grid.", modifier.padding(16.dp), style = MaterialTheme.typography.bodySmall)
+        return
+    }
+    val byDisplay = remember(result) { result.chords.associateBy { it.display } }
+    val grid = rememberLazyGridState()
+    LaunchedEffect(currentBar) {
+        if (currentBar >= 0) grid.animateScrollToItem(max(0, (currentBar / 4 - 2) * 4)) // the current row in the middle
+    }
+    LazyVerticalGrid(GridCells.Fixed(4), state = grid, contentPadding = PaddingValues(14.dp),
+                     modifier = modifier.fillMaxSize().testTag("leadSheet")) {
+        itemsIndexed(result.bars) { i, bar ->
+            val text = bar.chords.joinToString("  ") { if (notation == Notation.ROMAN) byDisplay[it]?.roman ?: it else it }.ifEmpty { "·" }
+            val shape = RoundedCornerShape(6.dp)
+            val cell = Modifier.padding(2.dp).clip(shape).clickable { onSeek(bar.start + 0.01) }.testTag("bar$i")
+            Box(if (i == currentBar) cell.background(MaterialTheme.colorScheme.onSurface)
+                else cell.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape)) {
+                Text(text, Modifier.padding(horizontal = 8.dp, vertical = 10.dp), fontWeight = FontWeight.SemiBold,
+                     color = if (i == currentBar) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurface)
             }
         }
     }
@@ -107,10 +106,8 @@ fun CircleOfFifths(result: AnalysisResult, current: ChordSegment, modifier: Modi
     val nodes = remember(result) { circleNodes(result) }
     val transitions = remember(result) { circleTransitions(result) }
     val description = circleDescription(result)
-    Card(modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            CardTitle("Circle of fifths")
-            Canvas(Modifier.align(Alignment.CenterHorizontally).widthIn(max = 340.dp).fillMaxWidth().aspectRatio(1f)
+    Box(modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center) {
+            Canvas(Modifier.aspectRatio(1f)
                        .testTag("circle").semantics { contentDescription = description }) {
                 val s = size.minDimension / 340f
                 fun place(index: Int, radius: Float) =
@@ -160,7 +157,6 @@ fun CircleOfFifths(result: AnalysisResult, current: ChordSegment, modifier: Modi
                     label(node.text, xy, 11f, Color.White, bold = true)
                 }
             }
-        }
     }
 }
 
@@ -169,9 +165,10 @@ fun CircleOfFifths(result: AnalysisResult, current: ChordSegment, modifier: Modi
 fun ChordShare(result: AnalysisResult, chordsByDisplay: Map<String, ChordSegment>, modifier: Modifier = Modifier) {
     val colors = LocalChordifyColors.current
     val summary = result.summary
-    Card(modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            CardTitle("Time per chord")
+    run {
+        Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp).testTag("statsPanel"),
+               verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SectionTitle("Time per chord")
             val top = summary.timeShare.firstOrNull()?.share ?: 1.0
             for (share in summary.timeShare.take(10)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -183,7 +180,7 @@ fun ChordShare(result: AnalysisResult, chordsByDisplay: Map<String, ChordSegment
                     Text("${percent(share.share)}%", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Text("Repeating progressions", style = MaterialTheme.typography.bodySmall, color = colors.muted)
+            SectionTitle("Repeating progressions")
             if (summary.patterns.isEmpty()) Text("No loop repeats three times or more.", style = MaterialTheme.typography.bodySmall)
             for (pattern in summary.patterns) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
