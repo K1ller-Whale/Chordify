@@ -1,6 +1,6 @@
 # A simpler, landscape-first Android app
 
-Status: agreed design, 2026-11-21. Milestone M7 of the
+Status: built, 2026-11-21. Milestone M7 of the
 [mobile app](2026-11-17-mobile-on-device-design.md).
 
 ## 1. Goal
