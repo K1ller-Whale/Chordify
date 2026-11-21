@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import com.arbaba.chordifymobile.data.ScreenOrientation
@@ -43,7 +44,7 @@ class MainActivityTest {
         waitFor("add")
         rule.onNodeWithText("Settings").performClick()
         waitFor("screen-LANDSCAPE")
-        rule.onNodeWithTag("about").performClick()
+        rule.onNodeWithTag("about").performScrollTo().performClick()
         waitForText("Source code")
         rule.onNodeWithTag("back").performClick()
         waitFor("about")
