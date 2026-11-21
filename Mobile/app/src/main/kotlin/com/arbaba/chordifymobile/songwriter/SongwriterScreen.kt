@@ -122,7 +122,7 @@ class SongwriterViewModel(application: Application) : AndroidViewModel(applicati
 
 /** The Songwriter tab. */
 @Composable
-fun SongwriterScreen(model: SongwriterViewModel = viewModel()) {
+fun SongwriterScreen(onBack: () -> Unit = {}, model: SongwriterViewModel = viewModel()) {
     val chords by model.chords.collectAsStateWithLifecycle()
     val draft by model.draft.collectAsStateWithLifecycle()
     val key by model.key.collectAsStateWithLifecycle()

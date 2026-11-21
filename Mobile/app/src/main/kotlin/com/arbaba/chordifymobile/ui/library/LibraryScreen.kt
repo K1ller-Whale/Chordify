@@ -61,7 +61,8 @@ import com.arbaba.chordifymobile.ui.summary
 /** The Library tab (spec §6.2): pick a file or record, the "Major and minor only" default, and
  *  every analysis with its progress or error. */
 @Composable
-fun LibraryScreen(onOpen: (String) -> Unit, model: LibraryViewModel = viewModel()) {
+fun LibraryScreen(onOpen: (String) -> Unit, onQuickChord: () -> Unit = {}, onSongwriter: () -> Unit = {},
+                  onSettings: () -> Unit = {}, model: LibraryViewModel = viewModel()) {
     val context = LocalContext.current
     val analyses by model.analyses.collectAsStateWithLifecycle()
     val majorMinorOnly by model.majorMinorOnly.collectAsStateWithLifecycle()
