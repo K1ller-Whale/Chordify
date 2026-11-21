@@ -70,7 +70,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.arbaba.chordifymobile.ui.AdaptiveLayout
 import com.arbaba.chordifymobile.ui.ScreenTopBar
@@ -251,6 +250,7 @@ private fun TopBarAction(label: String, icon: ImageVector, labelled: Boolean, on
 private fun AddButton(onPick: () -> Unit, onRecord: () -> Unit, onImportAnalysis: () -> Unit, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
     Box(modifier) {
+        // This Material version clears the semantics of the button's content, so the name is set here.
         ExtendedFloatingActionButton(onClick = { open = true }, modifier = Modifier.testTag("add").semantics { contentDescription = "Add" },
                                      icon = { Icon(Icons.Filled.Add, contentDescription = null) }, text = { Text("Add") })
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -266,7 +266,7 @@ private fun AddButton(onPick: () -> Unit, onRecord: () -> Unit, onImportAnalysis
 private fun RecordingBar(seconds: Double, onStop: () -> Unit, modifier: Modifier = Modifier) {
     Surface(modifier.testTag("recordingBar"), shape = MaterialTheme.shapes.large, tonalElevation = 6.dp, shadowElevation = 6.dp) {
         Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(10.dp).clip(CircleShape).background(Color.Red))
+            Box(Modifier.size(10.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error))
             Spacer(Modifier.width(8.dp))
             Text("Recording ${formatTime(seconds)}", Modifier.semantics { liveRegion = LiveRegionMode.Polite })
             Spacer(Modifier.width(12.dp))
