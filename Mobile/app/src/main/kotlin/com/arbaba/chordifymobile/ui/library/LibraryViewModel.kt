@@ -29,8 +29,6 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
 
     val analyses: StateFlow<List<Analysis>> =
         library.analyses.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-    val majorMinorOnly: StateFlow<Boolean> =
-        container.settings.majorMinorOnly.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     /** Seconds recorded so far, or null when not recording. */
     val recordingSeconds = MutableStateFlow<Double?>(null)
@@ -39,10 +37,6 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     val message = MutableStateFlow<String?>(null)
 
     private var stopRecording: AtomicBoolean? = null
-
-    fun setMajorMinorOnly(value: Boolean) {
-        viewModelScope.launch { container.settings.setMajorMinorOnly(value) }
-    }
 
     fun import(uri: Uri) {
         viewModelScope.launch {
