@@ -161,6 +161,8 @@ Notation and defaults live in DataStore.
 
 ### 6.2 Screens
 
+M7 replaces this layout: see `2026-11-21-mobile-simple-landscape-ui-design.md`.
+
 Bottom navigation: Library, Quick chord, Songwriter, Settings. The analysis screen opens from
 the Library; About opens from Settings.
 

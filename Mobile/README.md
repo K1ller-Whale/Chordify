@@ -16,7 +16,8 @@ network access. Design:
   `music/` ports the web app's `music.ts` and `capo.ts` (chord names, guitar shapes, capo).
   `playback/` plays the analysed file with Media3 under one playback clock and makes its
   waveform. `quick/` is Quick chord, `songwriter/` the Songwriter, and `ui/` holds the other
-  screens: the Library, the analysis screen with its timeline and tabs, Settings and About.
+  screens: the Library, the analysis screen (a play-along stage with a chord strip and one panel beside it,
+  landscape first), Settings and About.
 
 Chordify Mobile is free software under the GPL, version 3 or later ([`LICENSE`](LICENSE)),
 because it bundles NNLS Chroma (GPL-2.0-or-later). What else it bundles, and under which
