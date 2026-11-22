@@ -1,9 +1,12 @@
 package com.arbaba.chordifymobile.ui.analysis
 
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenu
@@ -13,12 +16,16 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.arbaba.chordifymobile.data.ExportFormat
@@ -31,7 +38,9 @@ import com.arbaba.chordifymobile.ui.ScreenTopBar
 /** Below this bar width the key, tempo and meter line is left out. */
 private val KEY_LINE_MIN_WIDTH = 480.dp
 
-/** The analysis screen's top bar: Back, the title, the capo chip and the more menu (notation, export, pick the file). */
+/** The analysis screen's top bar: Back, the title, the edit button, the capo chip and the more menu (notation, export,
+ *  pick the file, restore the model's chords). While [editing] it shows "✎ Editing" with Undo, Redo, Cancel and Done
+ *  instead, and Back cancels the edit. */
 @Composable
 fun AnalysisTopBar(title: String, analysed: AnalysisResult, capo: Int, suggestion: CapoSuggestion,
                    notation: Notation, onBack: () -> Unit, onCapo: (Int) -> Unit,
@@ -44,11 +53,23 @@ fun AnalysisTopBar(title: String, analysed: AnalysisResult, capo: Int, suggestio
     var more by remember { mutableStateOf(false) }
     BoxWithConstraints(modifier) {
         val showFacts = maxWidth >= KEY_LINE_MIN_WIDTH
+        if (editing) {
+            ScreenTopBar("✎ Editing", onCancelEdit) {
+                BarText("Undo", "undo", canUndo, onUndo)
+                BarText("Redo", "redo", canRedo, onRedo)
+                BarText("Cancel", "cancelEdit", true, onCancelEdit)
+                BarText("Done", "done", true, onDone)
+            }
+            return@BoxWithConstraints
+        }
         ScreenTopBar(title, onBack) {
             if (showFacts) {
                 Text(songFacts(analysed), style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.weight(1f, fill = false).padding(horizontal = 8.dp))
+            }
+            IconButton(onClick = onEdit, modifier = Modifier.testTag("edit")) {
+                Icon(Icons.Filled.Edit, contentDescription = "Edit chords")
             }
             Box {
                 AssistChip(onClick = { choosingCapo = true }, label = { Text(capoLabel(capo) + " ▾") },
@@ -74,8 +95,23 @@ fun AnalysisTopBar(title: String, analysed: AnalysisResult, capo: Int, suggestio
                     DropdownMenuItem(text = { Text("Export chords (.lab)") }, onClick = { more = false; onExport(ExportFormat.LAB) })
                     DropdownMenuItem(text = { Text("Export analysis (.json)") }, onClick = { more = false; onExport(ExportFormat.JSON) })
                     DropdownMenuItem(text = { Text("Pick the audio file") }, onClick = { more = false; onPickFile() })
+                    if (hasEdits) {
+                        DropdownMenuItem(text = { Text("Restore the model's chords") }, onClick = { more = false; onRestore() })
+                    }
                 }
             }
         }
+    }
+}
+
+/** A compact text action of the editing bar; the core icon set has no undo or redo icon. */
+@Composable
+private fun BarText(text: String, tag: String, enabled: Boolean, onClick: () -> Unit) {
+    // Not a TextButton: its 58 dp minimum width would squeeze the title on a 360 dp-wide phone.
+    val ink = MaterialTheme.colorScheme.primary
+    Box(Modifier.heightIn(min = 48.dp).testTag(tag).semantics { contentDescription = text }
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center) {
+        Text(text, style = MaterialTheme.typography.labelLarge, color = if (enabled) ink else ink.copy(alpha = 0.38f))
     }
 }

@@ -5,6 +5,8 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -15,6 +17,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,15 +48,22 @@ import com.arbaba.chordifymobile.playback.PlaybackClock
 import com.arbaba.chordifymobile.ui.LocalChordifyColors
 import kotlin.math.max
 
-/** Play/pause, the time, the seek bar (the whole song in function colours) and the speed chip.
+/** Play/pause, the time, the Loop chord chip (only when [looping] is not null), the seek bar (the whole song in function colours) and the speed chip.
  *  [visibleSeconds] is how many seconds the strip shows, outlined on the seek bar. */
 @Composable
 fun TransportBar(result: AnalysisResult, time: State<Double>, playing: Boolean, rate: Double,
                  visibleSeconds: Double, onToggle: () -> Unit, onSeek: (Double) -> Unit,
                  onRate: (Double) -> Unit, modifier: Modifier = Modifier,
                  looping: Boolean? = null, onLoop: () -> Unit = {}) {
-    // 8 dp between the parts, so that the seek bar keeps 120 dp on a 360 dp-wide phone held upright.
-    Row(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically,
+    // Below 480 dp (a phone held upright) the Loop chord chip gets a row of its own above, and the parts of
+    // the main row are 8 dp apart, so that the seek bar keeps 120 dp on a 360 dp-wide phone.
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+    val stacked = looping != null && maxWidth < LOOP_INLINE_MIN_WIDTH
+    Column {
+    if (stacked && looping != null) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) { LoopChip(looping, onLoop) }
+    }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilledIconButton(onClick = onToggle, modifier = Modifier.testTag("play").semantics { contentDescription = if (playing) "Pause" else "Play" }) {
             // The core icon set has a play icon but no pause icon, so pause is a text glyph. A "▶"
@@ -62,9 +72,20 @@ fun TransportBar(result: AnalysisResult, time: State<Double>, playing: Boolean, 
             else Icon(Icons.Filled.PlayArrow, contentDescription = null)
         }
         TimeText(time, result.source.duration)
+        if (looping != null && !stacked) LoopChip(looping, onLoop)
         SeekBar(result, time, visibleSeconds, onSeek, Modifier.weight(1f))
         SpeedChip(rate, onRate)
     }
+    }
+    }
+}
+
+/** From this width on the Loop chord chip shares the main row; below it the chip has a row of its own. */
+private val LOOP_INLINE_MIN_WIDTH = 480.dp
+
+@Composable
+private fun LoopChip(looping: Boolean, onLoop: () -> Unit) {
+    FilterChip(selected = looping, onClick = onLoop, label = { Text("Loop chord", maxLines = 1) }, modifier = Modifier.testTag("loop"))
 }
 
 /** Its own scope, so that only this text follows the clock every frame. */
