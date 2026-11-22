@@ -1,6 +1,7 @@
 package com.arbaba.chordifymobile.engine
 
 import android.content.Context
+import com.arbaba.chordifymobile.engine.acoustic.ChordBundle
 import com.arbaba.chordifymobile.engine.acoustic.ChordModel
 import com.arbaba.chordifymobile.engine.analysis.AnalysisOptions
 import com.arbaba.chordifymobile.engine.analysis.Measurements
@@ -70,22 +71,25 @@ class ChordifyEngine(private val chordModel: ChordModel, val models: Models) : A
         /** The share of [analyse]'s progress taken by the decoding pass (decode, NNLS and beats). */
         const val DECODE_SHARE = 0.6
 
-        /** The engine with the models the app ships (the engine's assets). */
-        fun fromAssets(context: Context): ChordifyEngine {
-            val chordModel = ChordModel.fromAssets(context)
-            try {
-                val (lmId, lmFile) = Models.readLmBundle(
-                    context.assets.open("${Models.LM_BUNDLE}/bundle.json").use { it.readBytes().decodeToString() })
-                // The Android build un-gzips *.gz assets and drops the suffix (the APK compresses them
-                // anyway), so the APK holds model.json where bundle.json names model.json.gz.
-                val lm = context.assets.open("${Models.LM_BUNDLE}/${lmFile.removeSuffix(".gz")}").use { stream ->
-                    NgramProgressionModel.fromJson(Json.parseToJsonElement(stream.readBytes().decodeToString()).jsonObject)
-                }
-                return ChordifyEngine(chordModel, Models(chordModel.bundle, lm, lmId))
-            } catch (error: Exception) {
-                chordModel.close()
-                throw error
+        /** The progression model's id and model file name, from the bundle.json the app ships. */
+        fun lmBundleFromAssets(context: Context): Pair<String, String> =
+            Models.readLmBundle(context.assets.open("${Models.LM_BUNDLE}/bundle.json").use { it.readBytes().decodeToString() })
+
+        /** The shipped models without the chord model's ONNX session: the chord bundle's bundle.json and the
+         *  progression model. That is all that rebuilding edited chords and suggesting the next chord need, and it
+         *  loads in a fraction of the time the chord model takes (reading, hashing and opening its 14 MB). */
+        fun modelsFromAssets(context: Context, bundle: ChordBundle = ChordModel.bundleFromAssets(context)): Models {
+            val (lmId, lmFile) = lmBundleFromAssets(context)
+            // The Android build un-gzips *.gz assets and drops the suffix (the APK compresses them
+            // anyway), so the APK holds model.json where bundle.json names model.json.gz.
+            val lm = context.assets.open("${Models.LM_BUNDLE}/${lmFile.removeSuffix(".gz")}").use { stream ->
+                NgramProgressionModel.fromJson(Json.parseToJsonElement(stream.readBytes().decodeToString()).jsonObject)
             }
+            return Models(bundle, lm, lmId)
         }
+
+        /** The engine with the models the app ships (the engine's assets); pass [models] when they are loaded already. */
+        fun fromAssets(context: Context, models: Models = modelsFromAssets(context)): ChordifyEngine =
+            ChordifyEngine(ChordModel.fromAssets(context, bundle = models.bundle), models)
     }
 }

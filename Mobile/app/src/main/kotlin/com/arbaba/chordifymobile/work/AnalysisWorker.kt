@@ -21,12 +21,14 @@ import com.arbaba.chordifymobile.engine.CancelledException
 import com.arbaba.chordifymobile.engine.ChordifyEngine
 import com.arbaba.chordifymobile.engine.EngineException
 import com.arbaba.chordifymobile.engine.analysis.AnalysisOptions
+import com.arbaba.chordifymobile.engine.analysis.Models
 import com.arbaba.chordifymobile.engine.analysis.SourceInfo
 import com.arbaba.chordifymobile.engine.analysis.Stage
 import com.arbaba.chordifymobile.engine.audio.AudioSource
 import com.arbaba.chordifymobile.ui.stageLabel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -35,15 +37,36 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-/** The engine, loaded once per process on first use, and the lock that runs one analysis at a time. */
-class EngineHolder(private val context: Context) {
+/** The engine, loaded once per process on first use, and the lock that runs one analysis at a time. The models
+ *  alone ([models]) load on their own, much faster, for what needs no chord model. */
+class EngineHolder internal constructor(
+    private val context: Context,
+    private val loadModels: (Context) -> Models,
+    private val loadEngine: (Context, Models?) -> ChordifyEngine,
+) {
+    constructor(context: Context) : this(context, { ChordifyEngine.modelsFromAssets(it) },
+        { app, models -> if (models != null) ChordifyEngine.fromAssets(app, models) else ChordifyEngine.fromAssets(app) })
+
     private val lock = Mutex()
     private val loading = Mutex()
+    private val loadingModels = Mutex()
     @Volatile private var engine: ChordifyEngine? = null
+    @Volatile private var models: Models? = null
 
-    private suspend fun load(): ChordifyEngine = engine ?: loading.withLock {
-        engine ?: withContext(Dispatchers.Default) { ChordifyEngine.fromAssets(context) }.also { engine = it }
+    /** The engine; it reuses the models if they are loaded already. */
+    private suspend fun load(): ChordifyEngine = once(loading, { engine }) { loadEngine(context, models).also { engine = it } }
+
+    /** The models that rebuilding edited chords and suggestions use: the engine's once it is loaded, else the
+     *  models alone, loaded once without the chord model's ONNX session. */
+    suspend fun models(): Models = engine?.models ?: once(loadingModels, { engine?.models ?: models }) {
+        loadModels(context).also { models = it }
     }
+
+    /** What [cached] has, else [load] run once under [lock], off the main thread. The load is not cancelled with its
+     *  caller and keeps what it made: a caller that leaves meanwhile (a closed screen, a stopped job) would otherwise
+     *  drop an engine whose native ONNX session nobody closes, and the next caller would load it all again. */
+    private suspend fun <T : Any> once(lock: Mutex, cached: () -> T?, load: () -> T): T =
+        cached() ?: lock.withLock { cached() ?: withContext(NonCancellable + Dispatchers.Default) { load() } }
 
     /** Runs [block] with the engine, one analysis at a time. */
     suspend fun <T> withEngine(block: suspend (ChordifyEngine) -> T): T = lock.withLock { block(load()) }

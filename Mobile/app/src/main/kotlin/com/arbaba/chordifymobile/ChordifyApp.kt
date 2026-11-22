@@ -7,9 +7,8 @@ import com.arbaba.chordifymobile.data.Library
 import com.arbaba.chordifymobile.data.LibraryDatabase
 import com.arbaba.chordifymobile.data.Settings
 import com.arbaba.chordifymobile.edit.rebuildWith
-import com.arbaba.chordifymobile.engine.acoustic.ChordBundle
+import com.arbaba.chordifymobile.engine.ChordifyEngine
 import com.arbaba.chordifymobile.engine.acoustic.ChordModel
-import com.arbaba.chordifymobile.engine.analysis.Models
 import com.arbaba.chordifymobile.engine.analysis.modelFingerprint
 import com.arbaba.chordifymobile.engine.analysis.modelIds
 import com.arbaba.chordifymobile.work.AnalysisNotification
@@ -41,9 +40,9 @@ class AppContainer(context: Context) {
      *  which a relaunch of the activity must not cancel. Lives as long as the process. */
     val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
-    private fun asset(path: String) = app.assets.open(path).use { it.readBytes().decodeToString() }
-    private val chordBundle by lazy { ChordBundle.parse(asset("${ChordModel.BUNDLE}/bundle.json")) }
-    private val lmId by lazy { Models.readLmBundle(asset("${Models.LM_BUNDLE}/bundle.json")).first }
+    // The same readers the engine loads its models with (ChordifyEngine.modelsFromAssets).
+    private val chordBundle by lazy { ChordModel.bundleFromAssets(app) }
+    private val lmId by lazy { ChordifyEngine.lmBundleFromAssets(app).first }
 
     /** The shipped models' fingerprint, read from their bundle.json files without loading them. */
     val fingerprint: String by lazy { modelFingerprint(chordBundle, lmId) }
