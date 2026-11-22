@@ -187,8 +187,9 @@ const val DISCARD_CONFIRM = "Discard your changes?"
 ### C3. App: the edit operations (T0, real code with JVM tests, new file `APP/edit/EditOps.kt`)
 
 All are pure. Every function returns a **normalised** list: sorted, touching, the first start 0,
-the last end `duration`, no span shorter than `MIN_SPAN_SECONDS`, and no two neighbours with the
-same label.
+the last end `duration`, and no span shorter than `MIN_SPAN_SECONDS`. Neighbours with the same
+label are **allowed**: a split's two halves stay separate until one is renamed or they are
+merged. Equal neighbours merge only in the two places listed below (decided 2026-11-22).
 
 ```kotlin
 const val MIN_SPAN_SECONDS = 0.05
@@ -213,16 +214,19 @@ The exact rules:
     start to the earlier end.
   - Give the time of a span shorter than `MIN_SPAN_SECONDS` to the previous span, or to the next
     one if it is first.
-  - Merge neighbours with equal labels (the merged span's `edited` = either's).
+  - It does **not** merge equal-label neighbours.
 - **`moveEdge`.** Clamp `time` into [spans[edge-1].start, spans[edge].end], set
   spans[edge-1].end = spans[edge].start = time, mark both `edited = true`, then normalise. A span
   collapsed to zero length disappears, which is how "dragging an edge onto the next edge removes
-  the chord" works.
+  the chord" works. If that removal leaves two spans with the same label touching, they merge into
+  one (`edited = true`). Moving an edge between two equal-label spans, such as a split's halves,
+  keeps both.
 - **`split`.** A no-op unless start + MIN < time < end − MIN. Both halves keep the label and get
   `edited = true`.
 - **`mergeWithNext`.** The first span absorbs the next, keeps its own label, and gets
   `edited = true`. A no-op on the last span.
-- **`rename`.** Sets the label, `edited = true`, then normalise, which merges equal neighbours.
+- **`rename`.** Sets the label, `edited = true`, normalises, and then merges the renamed span
+  with a neighbour of the same label on either side.
 
 ### C4. App: storage (T0 stubs; S1 implements; in `APP/data/Library.kt`)
 

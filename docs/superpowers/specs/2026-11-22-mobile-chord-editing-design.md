@@ -58,8 +58,9 @@ Every correction is made by hand. The app does not apply a fix anywhere on its o
   it moves freely. The panel's times and ±beat buttons give exact control.
 - **Removing.** If an edge reaches the neighbouring edge, the chord in between is removed. So is a
   chord shorter than 50 ms.
-- **Merging.** Two neighbouring chords with the same label become one, both after a rename and
-  after a move.
+- **Merging.** Two neighbouring chords with the same label become one after a rename, or when
+  removing a chord leaves them touching. A split's two halves stay separate until one is renamed
+  or **Merge with next** joins them, so the new edge can be dragged into place first.
 - **Song bounds.** Times are clamped to [0, song length].
 
 ### 2.4 Change chord…
