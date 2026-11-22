@@ -1,6 +1,9 @@
 package com.arbaba.chordifymobile.ui.library
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -66,6 +69,13 @@ class LibraryScreenTest {
         rule.onNodeWithTag("add").assertDoesNotExist()
         rule.onNodeWithText("Stop and analyse").performClick()
         assertEquals(listOf("record"), calls)
+    }
+
+    @Test fun theRecordingTimerIsNotReadOutEverySecond() {
+        show(LANDSCAPE, recordingSeconds = 42.0)
+        rule.onNodeWithText("Recording 0:42").assertExists()
+        rule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.LiveRegion) and hasText("Recording", substring = true))
+            .assertCountEquals(0)
     }
 
     @Test fun rowsOpenCancelAndRetry() {
