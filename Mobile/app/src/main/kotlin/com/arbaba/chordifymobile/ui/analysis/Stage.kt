@@ -113,7 +113,7 @@ fun Stage(chord: ChordSegment, notation: Notation, capo: Int, sounding: String?,
                     Text(doubt, style = typography.bodySmall, modifier = Modifier.testTag("unsureText"))
                 }
             }
-            if (!noChord) GuitarDiagram(shape, capo, width = diagramWidth)
+            if (!noChord && shape != null) GuitarDiagram(shape, capo, width = diagramWidth)
         } }
     }
 }

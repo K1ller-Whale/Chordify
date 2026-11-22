@@ -142,6 +142,32 @@ class StageTest {
         rule.onAllNodes(SemanticsMatcher("unsure") { it.config.getOrNull(SemanticsProperties.TestTag) == "unsure" }).assertCountEquals(0)
     }
 
+    private fun diagramTexts() = diagrams().fetchSemanticsNodes().map {
+        it.config.getOrNull(SemanticsProperties.ContentDescription)!!.first()
+    }
+
+    @Test fun customShapeChangesTheDiagramDescription() {
+        rule.show { Stage(c, Notation.LETTERS, 0, null, {}, shape = listOf(0, 0, 0, 0, 0, 0)) }
+        assertEquals(listOf(diagramDescription(listOf(0, 0, 0, 0, 0, 0), 0)), diagramTexts())
+        assertTrue(diagramTexts().single() != diagramDescription(com.arbaba.chordifymobile.music.guitarShape(c), 0))
+    }
+
+    @Test fun noShapeShowsNoDiagram() {
+        rule.show { Stage(c, Notation.LETTERS, 0, null, {}, shape = null) }
+        rule.onNodeWithTag("nowName", useUnmergedTree = true).assertTextEquals("C")
+        diagrams().assertCountEquals(0)
+        // not even the "no diagram" placeholder is composed
+        rule.onAllNodes(SemanticsMatcher("placeholder") {
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(diagramDescription(null, 0)) == true
+        }, useUnmergedTree = true).assertCountEquals(0)
+    }
+
+    @Test fun editedChordHasNoBadge() {
+        val edited = unsureChord.copy(confidence = 1.0, alternatives = emptyList(), edited = true)
+        rule.show { Stage(edited, Notation.LETTERS, 0, null, {}) }
+        rule.onAllNodes(SemanticsMatcher("unsure") { it.config.getOrNull(SemanticsProperties.TestTag) == "unsure" }).assertCountEquals(0)
+    }
+
     private fun noChord(size: DpSize) {
         val nc = Fixtures.sevenths.chords[4]
         rule.show(size) { Stage(nc, Notation.LETTERS, 2, "C", {}) }

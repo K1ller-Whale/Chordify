@@ -6,6 +6,7 @@ import androidx.room.Room
 import com.arbaba.chordifymobile.data.Library
 import com.arbaba.chordifymobile.data.LibraryDatabase
 import com.arbaba.chordifymobile.data.Settings
+import com.arbaba.chordifymobile.edit.rebuildWith
 import com.arbaba.chordifymobile.engine.acoustic.ChordBundle
 import com.arbaba.chordifymobile.engine.acoustic.ChordModel
 import com.arbaba.chordifymobile.engine.analysis.Models
@@ -50,5 +51,8 @@ class AppContainer(context: Context) {
     /** The shipped models, as a result's "models" block names them (About). */
     val modelIds: Map<String, String> by lazy { modelIds(chordBundle, lmId) }
 
-    val library: Library by lazy { Library(app, database.analyses(), WorkJobScheduler(app), fingerprint) }
+    val library: Library by lazy {
+        Library(app, database.analyses(), WorkJobScheduler(app), fingerprint,
+            rebuild = { result, spans -> rebuildWith(engine, result, spans) })
+    }
 }
