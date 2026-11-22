@@ -36,6 +36,15 @@ class PanelsTest {
         assert(rule.onAllNodesWithText("LEAD SHEET").fetchSemanticsNodes().isEmpty())
     }
 
+    @Test fun leadSheetMarksEditedChords() {
+        val edited = loop.copy(chords = loop.chords.mapIndexed { i, ch -> if (i == 1) ch.copy(edited = true) else ch })
+        rule.show { Box(Modifier.size(400.dp, 300.dp)) { LeadSheet(edited, Notation.LETTERS, 0) {} } }
+        rule.onNodeWithText("G ✎").assertIsDisplayed()
+        assertEquals(1, rule.onAllNodesWithText("✎", substring = true).fetchSemanticsNodes().size)
+        rule.onNodeWithText("C").assertIsDisplayed()
+        rule.onNodeWithText("Am").assertIsDisplayed()
+    }
+
     @Test fun leadSheetWithoutBarsSaysSo() {
         rule.show(PORTRAIT) { LeadSheet(loop.copy(bars = emptyList()), Notation.LETTERS, -1) {} }
         rule.onNodeWithText("No steady beat was found, so there is no bar grid.").assertIsDisplayed()

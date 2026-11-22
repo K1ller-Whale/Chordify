@@ -47,6 +47,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
+import com.arbaba.chordifymobile.engine.model.Bar
 import com.arbaba.chordifymobile.engine.model.ChordSegment
 import com.arbaba.chordifymobile.music.MAJOR_CIRCLE
 import com.arbaba.chordifymobile.music.MINOR_CIRCLE
@@ -81,7 +82,9 @@ fun LeadSheet(result: AnalysisResult, notation: Notation, currentBar: Int, modif
     LazyVerticalGrid(GridCells.Fixed(4), state = grid, contentPadding = PaddingValues(14.dp),
                      modifier = modifier.fillMaxSize().testTag("leadSheet")) {
         itemsIndexed(result.bars) { i, bar ->
-            val text = bar.chords.joinToString("  ") { if (notation == Notation.ROMAN) byDisplay[it]?.roman ?: it else it }.ifEmpty { "·" }
+            val text = bar.chords.joinToString("  ") {
+                (if (notation == Notation.ROMAN) byDisplay[it]?.roman ?: it else it) + if (isEditedIn(result, bar, it)) EDITED_MARK else ""
+            }.ifEmpty { "·" }
             val shape = RoundedCornerShape(6.dp)
             val cell = Modifier.padding(2.dp).clip(shape).clickable { onSeek(bar.start + 0.01) }.testTag("bar$i")
             Box(if (i == currentBar) cell.background(MaterialTheme.colorScheme.onSurface)
@@ -91,6 +94,15 @@ fun LeadSheet(result: AnalysisResult, notation: Notation, currentBar: Int, modif
             }
         }
     }
+}
+
+/** Appended to the name of a chord the user edited. */
+private const val EDITED_MARK = " ✎"
+
+/** Whether an edited chord named [display] overlaps [bar] by at least a quarter of it (the rule `bars()` uses). */
+private fun isEditedIn(result: AnalysisResult, bar: Bar, display: String): Boolean {
+    val quarter = (bar.end - bar.start) * 0.25
+    return result.chords.any { it.edited && it.display == display && minOf(it.end, bar.end) - maxOf(it.start, bar.start) >= quarter }
 }
 
 private const val C0 = 170f
