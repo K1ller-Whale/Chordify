@@ -37,7 +37,8 @@ Every correction is made by hand. The app does not apply a fix anywhere on its o
 ### 2.2 Selecting a chord
 
 - **The strip.** In Editing the strip grows from 72 dp to about 110 dp. Tapping a block selects it:
-  it gets a white outline and two drag handles, one on each edge.
+  it gets an outline and two drag handles, one on each edge, in the text colour (dark in the light
+  theme, white in the dark theme).
 - **The side panel.** It takes the place of the five tabs while editing, in both orientations, and
   shows:
   - the chord's name, with its numeral and function;
@@ -103,7 +104,8 @@ Names come only from the picker. Typing a name is out of scope (§6).
 
 - **What is stored.** Chords are stored as they sound, without the capo.
 - **What the editor shows.** It shows them as the stage does: the capo shapes. A chord picked with
-  a capo on is converted back to its sounding chord.
+  a capo on is converted back to its sounding chord, spelled in the song's key as the model spells
+  it (C♯m in A major, even when the capo shapes are in A♭).
 - **Shapes.** Custom shapes are fingerings, so they are keyed by the **shape** chord: what the
   player sees under the capo, as a Harte label such as `G:maj`. A custom G shape is used wherever
   the stage shows a G, whatever the capo.
@@ -148,8 +150,8 @@ carries a small "edited" mark in the strip and on the lead sheet.
   the edits file exists, the rebuilt result (§3.2). The screen shows the rebuilt one.
 - **Library rows.** They show the key and tempo of the result. Both stay as analysed (§2.7), so
   rows do not change.
-- **Adding the same song again.** Reuse by SHA-256 copies only the model's result. Edits stay with
-  the analysis they were made in.
+- **Adding the same song again.** Adding a file whose completed analysis already exists (same
+  SHA-256, models and options) does not make a copy: it opens that analysis, with its edits.
 
 ### 3.2 Rebuilding from chords
 
@@ -208,8 +210,17 @@ one implementation:
 
 ## 4. Errors
 
-- **Damaged edits file.** The analysis opens with the model's chords and a banner: "Your edits for
-  this song could not be loaded." The file is left in place.
+- **Damaged edits file.** A file that cannot be read opens the analysis with the model's chords and
+  a banner: "Your edits for this song could not be loaded." The file is left in place. If the player
+  later saves or clears the song's edits, it is first moved aside to `<id>.edits.damaged.json`, so
+  nothing is destroyed; deleting the analysis deletes that file too.
+- **Edits that cannot be rebuilt.** A file that reads fine but whose chords cannot be rebuilt right
+  now (for example, out of memory) is not damage: the model's chords show with a short message,
+  "Could not update the chords: …", **Restore** stays available, and **✎** starts editing from the
+  saved edits, rebuilding them again.
+- **Other messages.** A failed **Restore** ("Could not restore the model's chords: …") and an editing
+  session that cannot start because its first rebuild fails are told in a short message at the
+  bottom of the screen.
 - **Spans out of range.** Spans beyond the song's length, for example from an import, are clipped.
   A song whose spans would leave a gap is filled with N.C.
 - **A failed save.** Writing the edits file is atomic. If it fails, Editing stays open with "Could
