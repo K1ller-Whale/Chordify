@@ -1,6 +1,9 @@
 package com.arbaba.chordifymobile.ui.analysis
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -28,8 +31,9 @@ class ChordStripTest {
     private val time = mutableStateOf(0.0)
     private val seeks = mutableListOf<Double>()
 
+    // In a Box, so the strip takes its own height rather than the screen's.
     private fun showStrip() = rule.show(LANDSCAPE) {
-        ChordStrip(Fixtures.loop, time, 0, Notation.LETTERS, null, setOf(1), { seeks += it })
+        Box(Modifier.fillMaxSize()) { ChordStrip(Fixtures.loop, time, 0, Notation.LETTERS, null, setOf(1), { seeks += it }) }
     }
 
     @Test fun describesItself() {

@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.MaterialTheme
@@ -76,7 +75,7 @@ fun ChordStrip(result: AnalysisResult, time: State<Double>, current: Int, notati
     val star = remember(measurer) { measurer.measure("✦", TextStyle(fontSize = 12.sp)) }
     val pps = with(LocalDensity.current) { PIXELS_PER_SECOND.dp.toPx() }
     val onSeekNow by rememberUpdatedState(onSeek)
-    BoxWithConstraints(modifier.fillMaxWidth().requiredHeight(HEIGHT.dp).clipToBounds()
+    BoxWithConstraints(modifier.fillMaxWidth().height(HEIGHT.dp).clipToBounds()
                            .background(scheme.surface)
                            .testTag("strip")
                            .semantics { contentDescription = "Timeline of ${result.chords.size} chords: tap or drag to move through the song" }
