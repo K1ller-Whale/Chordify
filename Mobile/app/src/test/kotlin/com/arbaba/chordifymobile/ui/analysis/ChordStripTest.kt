@@ -22,8 +22,14 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import com.arbaba.chordifymobile.music.Notation
+import com.arbaba.chordifymobile.ui.ChordifyTheme
 import com.arbaba.chordifymobile.ui.Fixtures
+import kotlin.math.roundToInt
 import com.arbaba.chordifymobile.ui.LANDSCAPE
 import com.arbaba.chordifymobile.ui.assertEveryControlNamed
 import com.arbaba.chordifymobile.ui.show
@@ -204,6 +210,62 @@ class ChordStripTest {
         val beats = listOf(1.0, 1.5, 2.0)
         assertEquals(1.5, snapToBeat(1.5 + 5.0 / 70.0, beats, 6.0 / 70.0), 1e-9)
         assertEquals(1.25, snapToBeat(1.25, beats, 6.0 / 70.0), 1e-9)
+    }
+
+    /** The colour drawn at the middle of the selected chord 1's start handle, in the [dark] or light theme. */
+    private fun handleColour(dark: Boolean): Color {
+        rule.show(LANDSCAPE) {
+            ChordifyTheme(dark = dark) {
+                Box(Modifier.fillMaxSize()) {
+                    ChordStrip(loop, time, 0, Notation.LETTERS, null, emptySet(), {}, editing = true, selected = 1)
+                }
+            }
+        }
+        // captureToImage waits for a frame Robolectric never reports, so the window is drawn into a bitmap here.
+        val window = (rule as AndroidComposeTestRule<*, *>).activity.window.decorView
+        val bitmap = Bitmap.createBitmap(window.width, window.height, Bitmap.Config.ARGB_8888)
+        rule.runOnIdle { window.draw(android.graphics.Canvas(bitmap)) }
+        val strip = rule.onNodeWithTag("strip").fetchSemanticsNode()
+        val u = rule.density.density
+        // The handle is 7 dp wide around the block's left edge (start + 1 dp), and 30 dp tall around the
+        // middle of the 84 dp block that starts 4 dp down.
+        val x = strip.size.width * PLAYHEAD + loop.chords[1].start.toFloat() * PIXELS_PER_SECOND * u + 0.5f * u
+        return Color(bitmap.getPixel((strip.positionInWindow.x + x).roundToInt(), (strip.positionInWindow.y + 46f * u).roundToInt()))
+    }
+
+    @Test fun theSelectionShowsOnPaleBlocksInTheLightTheme() {
+        val colour = handleColour(dark = false)
+        assertTrue("the handle is $colour, too light to see on a pale block", colour.luminance() < 0.2f)
+    }
+
+    @Test fun theSelectionStaysLightInTheDarkTheme() {
+        val colour = handleColour(dark = true)
+        assertTrue("the handle is $colour", colour.luminance() > 0.8f)
+    }
+
+    @Test fun aRebuildThatTakesTheDraggedEdgeAwayDoesNotCrash() {
+        val shown = mutableStateOf(loop)
+        rule.show(LANDSCAPE) {
+            Box(Modifier.fillMaxSize()) {
+                ChordStrip(shown.value, time, 0, Notation.LETTERS, null, emptySet(), {},
+                           editing = true, selected = 2, onMoveEdge = { e, t -> moves += e to t })
+            }
+        }
+        val c = loop.chords[2]
+        rule.onNodeWithTag("strip").performTouchInput {
+            down(Offset(width * PLAYHEAD + c.end.toFloat() * pps.toPx(), centerY))
+            moveBy(Offset(-35.dp.toPx(), 0f))
+        }
+        // A rebuild lands while the finger is down and the last chord, with edge 3, is gone.
+        val three = loop.chords.take(3)
+        rule.runOnIdle { shown.value = loop.copy(chords = three.dropLast(1) + three.last().copy(end = loop.source.duration)) }
+        rule.waitForIdle()
+        rule.onNodeWithTag("strip").performTouchInput {
+            moveBy(Offset(-5.dp.toPx(), 0f))
+            up()
+        }
+        rule.waitForIdle()
+        assertTrue("an edge that is gone is not moved: $moves", moves.isEmpty())
     }
 
     @Test fun anEditedChordsNameEndsWithAPencil() {

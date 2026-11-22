@@ -1,7 +1,6 @@
 package com.arbaba.chordifymobile
 
 import android.net.Uri
-import android.util.Log
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -87,8 +86,6 @@ class ChordEditingDeviceTest {
         waitFor("leadSheet")
     }
 
-    private fun millisSince(start: Long) = (System.nanoTime() - start) / 1_000_000
-
     @Test
     fun aCorrectedChordIsKeptExportedAndRestored() = runBlocking<Unit> {
         val original = loop
@@ -99,10 +96,8 @@ class ChordEditingDeviceTest {
         // edit chord 1 (G) into E minor through the screen, and press Done
         ActivityScenario.launch(MainActivity::class.java).use {
             openSong(id)
-            val begun = System.nanoTime()
             rule.onNodeWithTag("edit").performClick()
             waitFor("editHint")
-            Log.i("I1", "first edit tap to the editing screen: ${millisSince(begun)} ms")
 
             rule.onNodeWithTag("strip").performTouchInput {
                 click(Offset(width * PLAYHEAD + (middle * PIXELS_PER_SECOND.dp.toPx()).toFloat(), centerY))
@@ -112,7 +107,7 @@ class ChordEditingDeviceTest {
             waitFor("chordPicker")
             rule.onNodeWithTag("root:E").performScrollTo().performClick()
             rule.onNodeWithTag("type:minor").performScrollTo().performClick()
-            rule.onNodeWithTag("pickerUse").performScrollTo().performClick()
+            rule.onNodeWithTag("pickerUse").performClick()
             waitGone("chordPicker")
             rule.waitUntil(30_000) { rule.onAllNodes(hasTestTag("nowName"), useUnmergedTree = true).fetchSemanticsNodes()
                 .any { node -> node.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } == "Em" } }
@@ -120,16 +115,13 @@ class ChordEditingDeviceTest {
 
             // drag the end of chord 1 earlier, wait for it to stay put, then undo the move
             val endBefore = endText()
-            val released = longArrayOf(0)
             rule.onNodeWithTag("strip").performTouchInput {
                 val pps = PIXELS_PER_SECOND.dp.toPx()
                 down(Offset(width * PLAYHEAD + (chord.end * pps).toFloat(), centerY))
                 moveBy(Offset(-35.dp.toPx(), 0f))
-                released[0] = System.nanoTime()
                 up()
             }
             rule.waitUntil(30_000) { endText() != endBefore }
-            Log.i("I1", "drag release to the moved edge: ${millisSince(released[0])} ms")
             rule.onNodeWithTag("undo").performClick()
             rule.waitUntil(30_000) { endText() == endBefore }
 

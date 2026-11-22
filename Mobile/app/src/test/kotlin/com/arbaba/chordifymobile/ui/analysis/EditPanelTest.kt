@@ -84,6 +84,20 @@ class EditPanelTest {
         assertEquals(listOf("start $at", "end $at", "split", "merge", "change", "shape"), calls)
     }
 
+    @Test fun aNoChordHasNoShapeToEdit() {
+        val sevenths = Fixtures.sevenths
+        val index = sevenths.chords.indexOfFirst { it.label == "N" }
+        val chord = sevenths.chords[index]
+        rule.show(LANDSCAPE) {
+            Box(Modifier.fillMaxSize()) {
+                EditPanel(chord, index, sevenths.chords.size, Notation.LETTERS, sevenths.beats, { chord.start },
+                    {}, {}, {}, {}, {}, { calls += "shape" })
+            }
+        }
+        rule.onNodeWithText("Edit shape…").performScrollTo().assertIsNotEnabled()
+        rule.onNodeWithText("Change chord…").performScrollTo().assertIsEnabled()
+    }
+
     @Test fun firstChordStartIsFixed() {
         panel(0)
         rule.onNodeWithContentDescription("Start one beat earlier").assertIsNotEnabled()

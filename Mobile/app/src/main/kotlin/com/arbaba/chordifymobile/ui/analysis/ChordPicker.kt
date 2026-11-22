@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -22,6 +23,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -83,43 +85,49 @@ internal fun ChordPickerContent(current: String, suggestions: List<String>, key:
     }
 
     Surface(Modifier.fillMaxSize().testTag("chordPicker"), color = MaterialTheme.colorScheme.background) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (suggestions.isNotEmpty()) {
-                Text("Suggested", style = MaterialTheme.typography.titleSmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    suggestions.forEach { s ->
-                        FilterChip(selected = s == label, onClick = { onPick(s) }, label = { Text(displayName(s, flats)) },
-                            modifier = Modifier.testTag("suggestion:$s"))
+        Column(Modifier.fillMaxSize()) {
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (suggestions.isNotEmpty()) {
+                    Text("Suggested", style = MaterialTheme.typography.titleSmall)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        suggestions.forEach { s ->
+                            FilterChip(selected = s == label, onClick = { onPick(s) }, label = { Text(displayName(s, flats)) },
+                                modifier = Modifier.testTag("suggestion:$s"))
+                        }
                     }
                 }
-            }
-            Text("Root", style = MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PICKER_ROOTS.forEach { r ->
-                    FilterChip(selected = !noChord && r == root, onClick = { root = r; noChord = false },
-                        label = { Text(ROOT_SHOWN[r] ?: r) }, modifier = Modifier.testTag("root:$r"))
+                Text("Root", style = MaterialTheme.typography.titleSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PICKER_ROOTS.forEach { r ->
+                        FilterChip(selected = !noChord && r == root, onClick = { root = r; noChord = false },
+                            label = { Text(ROOT_SHOWN[r] ?: r) }, modifier = Modifier.testTag("root:$r"))
+                    }
                 }
-            }
-            Text("Type", style = MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PICKER_TYPES.forEach { (name, _) ->
-                    FilterChip(selected = !noChord && name == (type ?: "major"), onClick = { type = name; noChord = false },
-                        label = { Text(name) }, modifier = Modifier.testTag("type:$name"))
+                Text("Type", style = MaterialTheme.typography.titleSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PICKER_TYPES.forEach { (name, _) ->
+                        FilterChip(selected = !noChord && name == (type ?: "major"), onClick = { type = name; noChord = false },
+                            label = { Text(name) }, modifier = Modifier.testTag("type:$name"))
+                    }
                 }
-            }
-            Text("Bass", style = MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = bass == null || bass == root, onClick = { bass = null },
-                    label = { Text("none") }, modifier = Modifier.testTag("bass:none"))
-                PICKER_ROOTS.forEach { r ->
-                    FilterChip(selected = bass == r && r != root, onClick = { bass = r; noChord = false },
-                        label = { Text(ROOT_SHOWN[r] ?: r) }, modifier = Modifier.testTag("bass:$r"))
+                Text("Bass", style = MaterialTheme.typography.titleSmall)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = bass == null || bass == root, onClick = { bass = null },
+                        label = { Text("none") }, modifier = Modifier.testTag("bass:none"))
+                    PICKER_ROOTS.forEach { r ->
+                        FilterChip(selected = bass == r && r != root, onClick = { bass = r; noChord = false },
+                            label = { Text(ROOT_SHOWN[r] ?: r) }, modifier = Modifier.testTag("bass:$r"))
+                    }
                 }
+                FilterChip(selected = noChord, onClick = { noChord = true }, label = { Text("No chord (N.C.)") },
+                    modifier = Modifier.testTag("noChord"))
             }
-            FilterChip(selected = noChord, onClick = { noChord = true }, label = { Text("No chord (N.C.)") },
-                modifier = Modifier.testTag("noChord"))
-            Text(preview, style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth().testTag("pickerPreview"))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // The choice and its buttons stay in view below the choices, so a pick never needs a scroll, even in landscape.
+            HorizontalDivider()
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(preview, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).testTag("pickerPreview"))
                 Button(onClick = { onPick(label) }, modifier = Modifier.testTag("pickerUse")) { Text("Use $display") }
                 TextButton(onClick = onCancel) { Text("Cancel") }
             }

@@ -85,8 +85,9 @@ private class EdgeDrag(val edge: Int, val x: Float, val grab: Double)
 /** A finished drag, drawn where it was released until the rebuilt [result] arrives (it is not the one that was shown). */
 private class HeldEdge(val edge: Int, val time: Double, val result: AnalysisResult)
 
-/** How long a released edge is held at most, if the rebuilt result never comes (a failed rebuild, or a move that changed nothing). */
-private const val HOLD_MILLIS = 600L
+/** How long a released edge is held at most when the result does not change: a failed rebuild that rolls the
+ *  move back, or a move that changed nothing. A rebuild that comes ends the hold at once, however long it took. */
+private const val HOLD_MAX_MILLIS = 3_000L
 
 /** The chords coming up, sliding toward a fixed playhead (the timeline's detail track, 72 dp tall). */
 @Composable
@@ -113,14 +114,19 @@ fun ChordStrip(result: AnalysisResult, time: State<Double>, current: Int, notati
     val onMoveEdgeNow by rememberUpdatedState(onMoveEdge)
     var drag by remember { mutableStateOf<EdgeDrag?>(null) }
     var held by remember { mutableStateOf<HeldEdge?>(null) }
-    LaunchedEffect(held) { if (held != null) { delay(HOLD_MILLIS); held = null } }
+    LaunchedEffect(held) { if (held != null) { delay(HOLD_MAX_MILLIS); held = null } }
+    LaunchedEffect(result) { if (held?.result !== result) held = null } // the rebuilt chords are here
+    // The selection's outline and handles: the text colour, dark on the light theme's pale blocks, light on the dark theme's.
+    val selection = scheme.onSurface
     val stripHeight = if (editing) EDIT_HEIGHT else HEIGHT
     val ribH = if (editing) EDIT_RIB_H else RIB_H
     val waveY = stripHeight - 2 - WAVE_H
     val playheadFraction = PLAYHEAD
-    // Where a drag puts its edge now: under the finger, whatever the strip has moved since, snapped and kept between its neighbours.
-    fun edgeTime(d: EdgeDrag, widthPx: Float): Double {
+    // Where a drag puts its edge now: under the finger, whatever the strip has moved since, snapped and kept between its
+    // neighbours; null when a rebuild that landed during the drag took the edge away.
+    fun edgeTime(d: EdgeDrag, widthPx: Float): Double? {
         val chords = resultNow.chords
+        if (d.edge !in 1 until chords.size) return null
         val raw = time.value + (d.x - widthPx * playheadFraction) / pps + d.grab
         val snap = SNAP_DP / PIXELS_PER_SECOND.toDouble()
         return snapToBeat(raw.coerceIn(chords[d.edge - 1].start, chords[d.edge].end), resultNow.beats, snap)
@@ -148,7 +154,7 @@ fun ChordStrip(result: AnalysisResult, time: State<Double>, current: Int, notati
                                        val playheadX = size.width * PLAYHEAD
                                        fun xOf(t: Double) = playheadX + ((t - time.value) * pps).toFloat()
                                        // The edge whose handle is under the finger, if its block is selected.
-                                       val handle = selectedNow?.let { i ->
+                                       val handle = selectedNow?.takeIf { it in chords.indices }?.let { i ->
                                            listOfNotNull(i.takeIf { it > 0 }, (i + 1).takeIf { it < chords.size })
                                                .filter { kotlin.math.abs(xOf(chords[it].start) - down.position.x) <= reach }
                                                .minByOrNull { kotlin.math.abs(xOf(chords[it].start) - down.position.x) }
@@ -169,8 +175,8 @@ fun ChordStrip(result: AnalysisResult, time: State<Double>, current: Int, notati
                                                    follow(change.position.x)
                                                }
                                                val done = drag
-                                               if (finished && handle != null && done != null) {
-                                                   val at = edgeTime(done, size.width.toFloat())
+                                               val at = done?.let { edgeTime(it, size.width.toFloat()) }
+                                               if (finished && handle != null && done != null && at != null) {
                                                    held = HeldEdge(done.edge, at, resultNow)
                                                    onMoveEdgeNow(done.edge, at)
                                                }
@@ -219,16 +225,15 @@ fun ChordStrip(result: AnalysisResult, time: State<Double>, current: Int, notati
                     drawLine(scheme.outline, Offset(x, middle - a), Offset(x, middle + a), stroke, StrokeCap.Round, alpha = 0.5f)
                 }
             }
+            // The edge under the finger, or the one just dropped until its rebuilt chords arrive, and where it is drawn.
+            val moved: Pair<Int, Double>? = drag?.let { d -> edgeTime(d, width)?.let { d.edge to it } }
+                ?: held?.takeIf { it.result === result && it.edge in 1 until result.chords.size }?.let { it.edge to it.time }
             for ((i, chord) in result.chords.withIndex()) {
                 val none = isNoChord(chord.label)
                 val color = colors.of(functionHue(chord.function))
                 val active = i == current
-                val d = drag
-                val h = held?.takeIf { it.result === result }
-                val movedEdge = d?.edge ?: h?.edge
-                val movedTo = d?.let { edgeTime(it, width) } ?: h?.time
-                val start = if (movedEdge == i) movedTo!! else chord.start
-                val end = if (movedEdge == i + 1) movedTo!! else chord.end
+                val start = if (moved?.first == i) moved.second else chord.start
+                val end = if (moved?.first == i + 1) moved.second else chord.end
                 val x = start.toFloat() * pps + u
                 val w = max(2 * u, (end - start).toFloat() * pps - 2 * u)
                 val alpha = if (chord.confidence < 0.35 && !none) 0.6f else 1f
@@ -250,11 +255,11 @@ fun ChordStrip(result: AnalysisResult, time: State<Double>, current: Int, notati
                 if (w > 60 * u && !none) text(numerals[i], if (active) Color.White else scheme.onSurfaceVariant, x + 8 * u, y(40f))
                 if (chord.index in surprising) text(star, ink, x + w - 16 * u, y(18f))
                 if (editing && i == selected) {
-                    drawRoundRect(Color.White, Offset(x, top), Size(w, height), CornerRadius(6 * u), style = Stroke(2.5f * u))
+                    drawRoundRect(selection, Offset(x, top), Size(w, height), CornerRadius(6 * u), style = Stroke(2.5f * u))
                     val hh = 30 * u
                     val hy = top + (height - hh) / 2
-                    if (i > 0) drawRoundRect(Color.White, Offset(x - 3 * u, hy), Size(7 * u, hh), CornerRadius(3.5f * u))
-                    if (i < result.chords.lastIndex) drawRoundRect(Color.White, Offset(x + w - 4 * u, hy), Size(7 * u, hh), CornerRadius(3.5f * u))
+                    if (i > 0) drawRoundRect(selection, Offset(x - 3 * u, hy), Size(7 * u, hh), CornerRadius(3.5f * u))
+                    if (i < result.chords.lastIndex) drawRoundRect(selection, Offset(x + w - 4 * u, hy), Size(7 * u, hh), CornerRadius(3.5f * u))
                 }
             }
         }

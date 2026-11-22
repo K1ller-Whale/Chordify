@@ -1,17 +1,22 @@
 package com.arbaba.chordifymobile.ui.analysis
 
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.DpSize
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.arbaba.chordifymobile.engine.model.KeyInfo
+import com.arbaba.chordifymobile.ui.LANDSCAPE
 import com.arbaba.chordifymobile.ui.PORTRAIT
 import com.arbaba.chordifymobile.ui.assertEveryControlNamed
 import com.arbaba.chordifymobile.ui.show
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -48,7 +53,7 @@ class ChordPickerTest {
         rule.onNodeWithTag("type:7").performScrollTo().performClick()
         rule.onNodeWithText("Use G7").assertExists()
         rule.onNodeWithTag("pickerPreview").assertExists()
-        rule.onNodeWithTag("pickerUse").performScrollTo().performClick()
+        rule.onNodeWithTag("pickerUse").performClick()
         assertEquals("G:7", picked)
     }
 
@@ -65,9 +70,24 @@ class ChordPickerTest {
         open("C:maj") { picked = it }
         rule.onNodeWithText("No chord (N.C.)").performScrollTo().performClick()
         rule.onNodeWithText("Use N.C.").assertExists()
-        rule.onNodeWithTag("pickerUse").performScrollTo().performClick()
+        rule.onNodeWithTag("pickerUse").performClick()
         assertEquals("N", picked)
     }
+
+    /** The preview and Use stay on screen, however long the choices are, so a pick never needs a scroll. */
+    private fun useIsShownWithoutScrolling(size: DpSize) {
+        rule.show(size) {
+            ChordPickerContent("E:min", listOf("A:min", "F:maj", "G:maj", "C:maj", "D:min", "B:dim"), key, false, {}, {})
+        }
+        rule.onNodeWithTag("pickerUse").assertIsDisplayed()
+        rule.onNodeWithTag("pickerPreview").assertIsDisplayed()
+        rule.onNodeWithText("Cancel").assertIsDisplayed()
+        val use = rule.onNodeWithTag("pickerUse").getUnclippedBoundsInRoot()
+        assertTrue("Use ends at ${use.bottom}, the screen at ${size.height}", use.bottom <= size.height)
+    }
+
+    @Test fun useIsShownWithoutScrollingInLandscape() = useIsShownWithoutScrolling(LANDSCAPE)
+    @Test fun useIsShownWithoutScrollingInPortrait() = useIsShownWithoutScrolling(PORTRAIT)
 
     @Test fun everyControlIsNamed() {
         open("E:min", listOf("A:min"))

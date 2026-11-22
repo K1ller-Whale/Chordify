@@ -10,6 +10,7 @@ import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -166,7 +167,8 @@ class AnalysisScreenTest {
         override fun split(index: Int, time: Double) { calls += "split $index" }
         override fun mergeWithNext(index: Int) { calls += "merge $index" }
         override fun rename(index: Int, soundingLabel: String) { calls += "rename $index $soundingLabel" }
-        override fun setShape(shapeLabel: String, shape: List<Int>?) { calls += "setShape $shapeLabel" }
+        override fun setShape(shapeLabel: String, shape: List<Int>?) { calls += "setShape $shapeLabel"; shapes += listOf(shape) }
+        val shapes = mutableListOf<List<Int>?>()
         override fun undo() { calls += "undo" }
         override fun redo() { calls += "redo" }
         override fun toggleLoop() { calls += "loop" }
@@ -273,6 +275,25 @@ class AnalysisScreenTest {
         assertEquals("C:maj", pickToRename("C:maj", 0, false))
     }
 
+    @Test fun aPickWithACapoIsSpelledAsTheModelSpellsTheSong() {
+        // A major (sharps) with capo 1: the shapes are in A♭ (flats). A C minor shape sounds as C♯ minor, which
+        // the model writes C#:min (its key's spelling), not Db:min (the shapes' spelling).
+        val song = loop.copy(key = loop.key.copy(global = KeyInfo("A", "major")))
+        val actions = Recorder()
+        rule.show(LANDSCAPE) {
+            AnalysisContent("Song", song, clock, Notation.LETTERS, 1, AudioFile.PLAYABLE, false,
+                onNotation = {}, onCapo = {}, onPickFile = {},
+                edit = EditUiState(spansOf(song), emptyMap(), song, 1, canUndo = false, canRedo = false, dirty = false,
+                                   looping = false),
+                editActions = actions)
+        }
+        rule.onNodeWithText("Change chord…").performScrollTo().performClick()
+        rule.onNodeWithTag("root:C").performScrollTo().performClick()
+        rule.onNodeWithTag("type:minor").performScrollTo().performClick()
+        rule.onNodeWithTag("pickerUse").performClick()
+        rule.runOnIdle { assertEquals("rename 1 C#:min", actions.calls.last()) }
+    }
+
     @Test fun theStageShowsTheSelectedChordNotThePlayheadChord() {
         showEditing(Recorder(), editState(selected = 2)) // the clock is at chord 0 (C), chord 2 is Am
         rule.onNodeWithTag("nowName", useUnmergedTree = true).assertTextEquals(loop.chords[2].display)
@@ -294,7 +315,7 @@ class AnalysisScreenTest {
         val shownResult = withCapo(loop, capo)
         val flats = shapeKey(loop.key.global.tonic, loop.key.global.mode, capo).flats
         rule.show {
-            EditDialogs(which, {}, 1, shownResult, capo, flats, saved, loop, actions,
+            EditDialogs(which, {}, 1, shownResult, capo, flats, keyFlats = false, saved, loop, actions,
                 picker = { current, suggestions, _, _, onPick, _ ->
                     slots.current = current; slots.suggestions = suggestions; slots.onPick = onPick
                 },
@@ -327,6 +348,16 @@ class AnalysisScreenTest {
         rule.runOnIdle { slots.onSave!!(listOf(1, 1, 1, 1, 1, 1)) }
         rule.runOnIdle { slots.onSave!!(null) }
         assertEquals(listOf("setShape $label", "setShape $label"), actions.calls)
+        assertEquals(listOf(listOf(1, 1, 1, 1, 1, 1), null), actions.shapes)
+    }
+
+    @Test fun savingTheDefaultShapeKeepsNoCustomShape() {
+        val actions = Recorder()
+        val slots = Slots()
+        showDialogs(EditDialog.SHAPE, actions, slots)
+        val default = slots.defaultShape!!
+        rule.runOnIdle { slots.onSave!!(default) }
+        assertEquals(listOf<List<Int>?>(null), actions.shapes)
     }
 }
 

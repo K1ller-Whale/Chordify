@@ -27,6 +27,7 @@ import com.arbaba.chordifymobile.edit.stepToBeat
 import com.arbaba.chordifymobile.engine.model.ChordSegment
 import com.arbaba.chordifymobile.music.Notation
 import com.arbaba.chordifymobile.music.chordName
+import com.arbaba.chordifymobile.music.isNoChord
 import com.arbaba.chordifymobile.ui.SectionTitle
 import java.util.Locale
 import kotlin.math.floor
@@ -88,6 +89,6 @@ fun EditPanel(chord: ChordSegment, index: Int, count: Int, notation: Notation, b
         OutlinedButton(onSplit, enabled = splitOk) { Text("Split here") }
         OutlinedButton(onMergeWithNext, enabled = !last) { Text("Merge with next") }
         Button(onChangeChord) { Text("Change chord…") }
-        OutlinedButton(onEditShape) { Text("Edit shape…") }
+        OutlinedButton(onEditShape, enabled = !isNoChord(chord.label)) { Text("Edit shape…") } // N.C. has no shape
     }
 }

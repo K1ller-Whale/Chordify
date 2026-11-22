@@ -183,7 +183,10 @@ fun AnalysisContent(
     val preview = edit?.preview
     val result = remember(analysed, capo, preview) { withCapo(preview ?: analysed, capo) }
     val shown = if (edit != null) edit.shapes else shapes
+    // Shown names (the shapes under the capo) are spelled in the shapes' key; a picked chord goes back to the
+    // sounding chord spelled in the song's key, as the model spells it, so that equal chords stay one name.
     val flats = remember(analysed, capo) { shapeKey(analysed.key.global.tonic, analysed.key.global.mode, capo).flats }
+    val keyFlats = remember(analysed) { shapeKey(analysed.key.global.tonic, analysed.key.global.mode, 0).flats }
     var dialog by remember { mutableStateOf<EditDialog?>(null) }
     val cancelEdit = { if (edit?.dirty == true) dialog = EditDialog.DISCARD else editActions.cancelEditing() }
     BackHandler(enabled = edit != null) { cancelEdit() }
@@ -319,17 +322,19 @@ fun AnalysisContent(
         if ((edit == null && d != null && d != EditDialog.RESTORE) ||
             (selected == null && (d == EditDialog.PICKER || d == EditDialog.SHAPE))) dialog = null
     }
-    EditDialogs(dialog, { dialog = null }, selected, result, capo, flats, shown, preview, editActions)
+    EditDialogs(dialog, { dialog = null }, selected, result, capo, flats, keyFlats, shown, preview, editActions)
 }
 
 /** The picker's and the shape editor's slots, so tests can replace the dialogs. */
 internal typealias PickerSlot = @Composable (String, List<String>, KeyInfo, Boolean, (String) -> Unit, () -> Unit) -> Unit
 internal typealias ShapeEditorSlot = @Composable (String, List<Int>?, List<Int>?, Int, (List<Int>?) -> Unit, () -> Unit) -> Unit
 
-/** The screen's open dialog, if any. [result] is the shown (capo) result and [selected] an index into it. */
+/** The screen's open dialog, if any. [result] is the shown (capo) result and [selected] an index into it. Shown
+ *  names are spelled with [flats] (the shapes' key), sounding ones with [keyFlats] (the song's key). */
 @Composable
 internal fun EditDialogs(dialog: EditDialog?, onClose: () -> Unit, selected: Int?, result: AnalysisResult, capo: Int,
-                         flats: Boolean, shapes: Map<String, List<Int>>, preview: AnalysisResult?, editActions: EditActions,
+                         flats: Boolean, keyFlats: Boolean, shapes: Map<String, List<Int>>, preview: AnalysisResult?,
+                         editActions: EditActions,
                          picker: PickerSlot = { a, b, c, d, e, f -> ChordPicker(a, b, c, d, e, f) },
                          shapeEditor: ShapeEditorSlot = { a, b, c, d, e, f -> ShapeEditor(a, b, c, d, e, f) }) {
     when (dialog) {
@@ -340,12 +345,14 @@ internal fun EditDialogs(dialog: EditDialog?, onClose: () -> Unit, selected: Int
                 suggestions = editActions.suggestions(selected).map { shapeLabelOf(it, capo, flats) }
             }
             picker(label, suggestions, result.key.global, flats,
-                { onClose(); editActions.rename(selected, pickToRename(it, capo, flats)) }, onClose)
+                { onClose(); editActions.rename(selected, pickToRename(it, capo, keyFlats)) }, onClose)
         }
         EditDialog.SHAPE -> if (selected != null) {
             val chosen = result.chords[selected]
-            shapeEditor(chosen.label, shapes[chosen.label], guitarShape(chosen), capo,
-                { onClose(); editActions.setShape(chosen.label, it) }, onClose)
+            val default = guitarShape(chosen)
+            // Saving the app's own shape keeps no custom shape, as Default shape does.
+            shapeEditor(chosen.label, shapes[chosen.label], default, capo,
+                { onClose(); editActions.setShape(chosen.label, it?.takeIf { shape -> shape != default }) }, onClose)
         }
         EditDialog.DISCARD -> ConfirmDialog(DISCARD_CONFIRM, "Discard", "Keep editing", "discardDialog",
             onConfirm = { onClose(); editActions.cancelEditing() }, onDismiss = onClose)
@@ -358,7 +365,8 @@ internal fun EditDialogs(dialog: EditDialog?, onClose: () -> Unit, selected: Int
 /** The dialogs the analysis screen can have open. */
 internal enum class EditDialog { PICKER, SHAPE, DISCARD, RESTORE }
 
-/** The sounding label for a [picked] shown label: the picker shows the shapes to play with the capo on. */
+/** The sounding label for a [picked] shown label: the picker shows the shapes to play with the capo on. Pass the
+ *  song key's [flats] (not the shapes'), so the label is spelled as the model spells the song's chords. */
 internal fun pickToRename(picked: String, capo: Int, flats: Boolean): String = soundingLabel(picked, capo, flats)
 
 @Composable

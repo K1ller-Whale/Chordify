@@ -219,7 +219,7 @@ class AnalysisFlowTest {
         rule.onNodeWithTag("root:E").performScrollTo().performClick()
         rule.onNodeWithTag("type:minor").performScrollTo().performClick()
         rule.onNodeWithText("Use Em").assertExists()
-        rule.onNodeWithTag("pickerUse").performScrollTo().performClick()
+        rule.onNodeWithTag("pickerUse").performClick()
         rule.waitForIdle()
         rule.onNodeWithTag("chordPicker").assertDoesNotExist()
         nowName().assertTextEquals("Em")

@@ -18,8 +18,9 @@ private const val EPS = 1e-9
 fun spansOf(result: AnalysisResult): List<ChordSpan> =
     result.chords.map { ChordSpan(it.start, it.end, it.label, it.edited) }
 
-/** [spans] sorted, clamped into [0, duration], with gaps filled by "N", overlaps resolved, short
- *  spans absorbed and equal neighbours merged. */
+/** [spans] sorted, clamped into [0, duration], with gaps filled by "N", overlaps resolved and short
+ *  spans absorbed. Equal-label neighbours are kept apart (a split's halves); only [moveEdge] and
+ *  [rename] merge them. */
 fun normalise(spans: List<ChordSpan>, duration: Double): List<ChordSpan> {
     val sorted = spans
         .map { s ->
