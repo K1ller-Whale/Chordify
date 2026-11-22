@@ -19,7 +19,7 @@ import kotlinx.coroutines.launch
  * a damaged one out of the way, and [next] suggests what follows chords (Harte labels) in a key ("C major").
  *
  * Only a file that cannot be read is damaged (spec §4): it stays in place, and the first save or clear sets it
- * aside before replacing it. Edits that read but cannot be rebuilt (out of memory, say) are still the user's:
+ * aside before replacing it. Edits that read but cannot be rebuilt (a model that fails to load, say) are still the user's:
  * the model's result shows with a message, Restore stays available, and editing starts from them, its own
  * rebuild trying again, so nothing replaces them with the model's chords.
  */
