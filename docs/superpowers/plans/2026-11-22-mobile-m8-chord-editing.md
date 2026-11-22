@@ -128,10 +128,11 @@ The semantics E1 implements:
 - **Predictions.** `next`, `theoryOnly`, `surprise` and `summary.predictability` are recomputed as
   `analyseMeasured` does, but only if `result.chords.any { it.next.isNotEmpty() }`. Otherwise they
   stay empty or null.
-- **Derived fields.** `bars` comes from
-  `bars(result.downbeats.toDoubleArray(), result.source.duration, chords)` (empty if there are no
-  downbeats), and `summary.uniqueChords`, `timeShare` and `patterns` are computed as in
-  `analyseMeasured`.
+- **Derived fields.** `bars` keeps each stored bar's start and end from `result.bars` and
+  recomputes only its chord names, with the helper `barChords` that `bars()` also uses (same 25 %
+  overlap rule and consecutive dedup). Bounds depend only on the kept downbeats and duration, so
+  reusing them avoids rounding drift (amended in E1's review). `summary.uniqueChords`, `timeShare`
+  and `patterns` are computed as in `analyseMeasured`.
 - **The flag.** `edited` is copied from the span.
 
 ### C2. App: the edit model (T0, real code, new file `APP/edit/Edits.kt`, package `com.arbaba.chordifymobile.edit`)
