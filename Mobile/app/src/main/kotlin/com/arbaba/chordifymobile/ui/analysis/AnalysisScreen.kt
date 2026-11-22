@@ -3,34 +3,23 @@ package com.arbaba.chordifymobile.ui.analysis
 import android.app.Application
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -41,13 +30,12 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -56,35 +44,32 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.arbaba.chordifymobile.data.Analysis
 import com.arbaba.chordifymobile.data.ExportFormat
 import com.arbaba.chordifymobile.data.Status
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
-import com.arbaba.chordifymobile.music.MAX_CAPO
 import com.arbaba.chordifymobile.music.Notation
 import com.arbaba.chordifymobile.music.chordIndexAt
-import com.arbaba.chordifymobile.music.formatTime
 import com.arbaba.chordifymobile.music.isNoChord
 import com.arbaba.chordifymobile.music.suggestCapo
 import com.arbaba.chordifymobile.music.withCapo
 import com.arbaba.chordifymobile.playback.PlaybackClock
+import com.arbaba.chordifymobile.ui.AdaptiveLayout
 import com.arbaba.chordifymobile.ui.stageLabel
-import java.util.Locale
-import kotlin.math.abs
-import kotlin.math.roundToInt
 
-/** The analysis screen (spec §6.2), opened from the Library. */
+/** The analysis screen (M7 spec §3), opened from the Library: the analysing, failed and cancelled
+ *  states, or the completed analysis ([AnalysisContent]). */
 @Composable
-fun AnalysisScreen(id: String) {
+fun AnalysisScreen(id: String, onBack: () -> Unit = {}) {
     val application = LocalContext.current.applicationContext as Application
     val model: AnalysisViewModel = viewModel(key = id) { AnalysisViewModel(application, id) }
     val row by model.analysis.collectAsStateWithLifecycle()
@@ -116,6 +101,7 @@ fun AnalysisScreen(id: String) {
         onPickFile = { pick.launch(arrayOf("audio/*")) },
         peaks = peaks,
         onExport = { format -> model.export(format) { context.startActivity(it) } },
+        onBack = onBack,
     )
 }
 
@@ -145,9 +131,10 @@ fun AnalysisStatus(analysis: Analysis, onRetry: () -> Unit) {
     }
 }
 
-/** A completed analysis, without its view model, so tests can show it in any state. The header
- *  keeps the song's real key; everything below shows the shapes to play with the capo on. */
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+/** A completed analysis, without its view model, so tests can show it in any state. In a wide
+ *  space the stage and the chord strip sit beside one tabbed panel; in a tall one they stack. The
+ *  top bar keeps the song's real key; everything below shows the shapes to play with the capo on. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AnalysisContent(
     title: String,
@@ -162,21 +149,28 @@ fun AnalysisContent(
     onPickFile: () -> Unit,
     peaks: FloatArray? = null,
     onExport: (ExportFormat) -> Unit = {},
+    onBack: () -> Unit = {},
 ) {
     val result = remember(analysed, capo) { withCapo(analysed, capo) }
     val suggestion = remember(analysed) { suggestCapo(analysed.chords) }
-    // The time is read by small scopes only (the countdown, the progress bar, the time text), so
-    // the rest of the screen recomposes when the chord changes, not every frame (spec §6.3).
+    // The time is read by small scopes only (the Chord panel's countdown, the strip, the seek bar
+    // and the time text), so the rest of the screen recomposes when the chord changes, not every
+    // frame (spec §6.3).
     val time: State<Double> = clock.time.collectAsState()
     val playing by clock.playing.collectAsState()
+    val rate by clock.rate.collectAsState()
     val starts = remember(result) { result.chords.map { it.start } }
     val index by remember(starts) { derivedStateOf { chordIndexAt(starts, time.value) } }
     val chord = result.chords[index]
+    val sounding = analysed.chords.getOrNull(index)?.display
     val chordsByDisplay = remember(result) { result.chords.filter { !isNoChord(it.label) }.associateBy { it.display } }
     val surprising = remember(result) { surprisingChords(result.chords) }
     val barStarts = remember(result) { result.bars.map { it.start } }
     val bar by remember(barStarts) { derivedStateOf { barIndexAt(barStarts, time.value) } }
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+    var tab by rememberSaveable { mutableStateOf(PanelTab.CHORD) }
+    var stageWidthPx by remember { mutableFloatStateOf(0f) }
+    val density = LocalDensity.current
+    val visibleSeconds = with(density) { stageWidthPx.toDp().value }.toDouble() / PIXELS_PER_SECOND.toDouble()
     val focus = remember { FocusRequester() }
     val view = LocalView.current
 
@@ -189,13 +183,6 @@ fun AnalysisContent(
     }
     LaunchedEffect(focus) { focus.requestFocus() } // for the keyboard shortcuts
 
-    // A swipe on Now playing goes to the next chord (to the left) or the previous one (to the right).
-    val swipe = Modifier.testTag("nowPlaying").pointerInput(starts) {
-        var moved = 0f
-        detectHorizontalDragGestures(onDragStart = { moved = 0f }, onDragEnd = {
-            if (abs(moved) > 48.dp.toPx()) clock.seek(chordStep(starts, clock.time.value, if (moved < 0) 1 else -1))
-        }) { _, dx -> moved += dx }
-    }
     // The web's shortcuts: Space plays or pauses, the arrows jump between chords, R toggles Roman numerals.
     val keys = Modifier.focusRequester(focus).focusable().onPreviewKeyEvent { event ->
         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -209,132 +196,59 @@ fun AnalysisContent(
         true
     }
 
+    // The no-audio banner (when there is one) above the stage, so it hides none of it; then the chord strip.
+    val stageColumn: @Composable ColumnScope.() -> Unit = {
+        NoAudioBanner(audio, mismatch, onPickFile, Modifier.padding(start = 8.dp, top = 8.dp, end = 8.dp))
+        Stage(chord, notation, capo, sounding, onSwipe = { clock.seek(chordStep(starts, clock.time.value, it)) },
+              modifier = Modifier.weight(1f).fillMaxWidth())
+        ChordStrip(result, time, index, notation, peaks, surprising, onSeek = { clock.seek(it) })
+    }
+    // The tab row over the selected panel. Compact tabs (labelLarge, 4 dp padding instead of
+    // Material's 16 dp) so that all five labels fit in the 40% of a landscape phone.
+    val panelColumn: @Composable ColumnScope.() -> Unit = {
+        PrimaryTabRow(selectedTabIndex = tab.ordinal) {
+            for (entry in PanelTab.entries) {
+                Tab(selected = tab == entry, onClick = { tab = entry }, modifier = Modifier.height(48.dp).testTag("tab-${entry.name}")) {
+                    Text(entry.label, Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                }
+            }
+        }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            val fill = Modifier.fillMaxSize()
+            when (tab) {
+                PanelTab.CHORD -> ChordPanel(chord, result, { time.value }, notation, fill)
+                PanelTab.SHEET -> LeadSheet(result, notation, bar, fill) { clock.seek(it) }
+                PanelTab.CIRCLE -> CircleOfFifths(result, chord, fill)
+                PanelTab.STATS -> ChordShare(result, chordsByDisplay, fill)
+                PanelTab.SONG -> SongPanel(analysed, result, capo, suggestion, fill)
+            }
+        }
+    }
+
     Column(Modifier.fillMaxSize().then(keys).testTag("analysis")) {
-        BoxWithConstraints(Modifier.weight(1f)) {
-            // the web's two columns: Now playing and What comes next side by side on a wide screen
-            val wide = maxWidth >= 600.dp && maxWidth > maxHeight
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Header(analysed, result, notation, capo, onNotation, onCapo, onExport)
-                Notices(analysed, capo, suggestion.let { suggestionNotice(it, capo) }, suggestion.capo, audio, mismatch, onCapo, onPickFile)
-                val sounding = analysed.chords.getOrNull(index)?.display
-                val next = actualNext(result.chords, chord)
-                if (wide) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        NowPlayingCard(chord, result, { time.value }, notation, capo, sounding, swipe.weight(1f))
-                        NextChordCard(chord, next, chordsByDisplay, notation, Modifier.weight(1f).testTag("whatComesNext"))
-                    }
-                } else {
-                    NowPlayingCard(chord, result, { time.value }, notation, capo, sounding, swipe)
-                    NextChordCard(chord, next, chordsByDisplay, notation, Modifier.testTag("whatComesNext"))
+        AnalysisTopBar(title, analysed, capo, suggestion, notation, onBack, onCapo, onNotation, onExport, onPickFile)
+        AdaptiveLayout(Modifier.weight(1f).fillMaxWidth()) { landscape ->
+            val stageArea = Modifier.onSizeChanged { stageWidthPx = it.width.toFloat() }.testTag("stageArea")
+            if (landscape) {
+                Row(Modifier.fillMaxSize()) {
+                    Column(stageArea.weight(0.6f).fillMaxHeight(), content = stageColumn)
+                    Column(Modifier.weight(0.4f).fillMaxHeight().testTag("panelArea"), content = panelColumn)
                 }
-                Timeline(result, clock, time, index, notation, peaks, surprising)
-                PrimaryTabRow(selectedTabIndex = tab) {
-                    for ((i, name) in listOf("Lead sheet", "Circle of fifths", "Stats").withIndex()) {
-                        Tab(selected = tab == i, onClick = { tab = i }, text = { Text(name) })
+            } else {
+                BoxWithConstraints(Modifier.fillMaxSize()) {
+                    // the stage takes 40% of the height, the strip comes under it
+                    val stageHeight = maxHeight * 0.4f + STRIP_HEIGHT
+                    Column(Modifier.fillMaxSize()) {
+                        Column(stageArea.fillMaxWidth().height(stageHeight), content = stageColumn)
+                        Column(Modifier.weight(1f).fillMaxWidth().testTag("panelArea"), content = panelColumn)
                     }
                 }
-                when (tab) {
-                    0 -> LeadSheet(result, notation, bar) { clock.seek(it) }
-                    1 -> CircleOfFifths(result, chord)
-                    else -> ChordShare(result, chordsByDisplay)
-                }
-                Text("Models: " + result.models.entries.joinToString(" · ") { "${it.key} ${it.value}" } +
-                     ". With a keyboard, Space plays or pauses, ← and → jump between chords, and R toggles Roman numerals.",
-                     style = MaterialTheme.typography.bodySmall, fontSize = 11.sp)
             }
         }
-        Transport({ time.value }, result.source.duration, playing, clock)
+        TransportBar(result, time, playing, rate, visibleSeconds, onToggle = clock::toggle, onSeek = clock::seek,
+                     onRate = clock::setRate)
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun Header(analysed: AnalysisResult, result: AnalysisResult, notation: Notation, capo: Int,
-                   onNotation: (Notation) -> Unit, onCapo: (Int) -> Unit, onExport: (ExportFormat) -> Unit) {
-    val key = analysed.key.global
-    var choosing by remember { mutableStateOf(false) }
-    var exporting by remember { mutableStateOf(false) }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        AssistChip(onClick = {}, label = { Text("Key ${key.tonic} ${key.mode}") })
-        result.tempo.bpm?.let { AssistChip(onClick = {}, label = { Text("${it.roundToInt()} BPM") }) }
-        AssistChip(onClick = {}, label = { Text(result.tempo.meter) })
-        AssistChip(onClick = {}, label = { Text("${result.summary.uniqueChords} chords") })
-        Box {
-            AssistChip(onClick = { choosing = true }, label = { Text(if (capo == 0) "Capo: none" else "Capo: fret $capo") },
-                       modifier = Modifier.testTag("capo"))
-            DropdownMenu(expanded = choosing, onDismissRequest = { choosing = false }) {
-                for (fret in 0..MAX_CAPO) {
-                    DropdownMenuItem(text = { Text(if (fret == 0) "none" else "fret $fret") },
-                                     onClick = { onCapo(fret); choosing = false })
-                }
-            }
-        }
-        Box {
-            AssistChip(onClick = { exporting = true }, label = { Text("Export") }, modifier = Modifier.testTag("export"))
-            DropdownMenu(expanded = exporting, onDismissRequest = { exporting = false }) {
-                DropdownMenuItem(text = { Text("Chords as .lab") }, onClick = { onExport(ExportFormat.LAB); exporting = false })
-                DropdownMenuItem(text = { Text("Whole analysis as .json") }, onClick = { onExport(ExportFormat.JSON); exporting = false })
-            }
-        }
-    }
-    SingleChoiceSegmentedButtonRow {
-        for ((i, choice) in Notation.entries.withIndex()) {
-            SegmentedButton(selected = notation == choice, onClick = { onNotation(choice) },
-                            shape = SegmentedButtonDefaults.itemShape(i, Notation.entries.size)) {
-                Text(if (choice == Notation.LETTERS) "Letters" else "Roman")
-            }
-        }
-    }
-}
-
-@Composable
-private fun Notices(analysed: AnalysisResult, capo: Int, suggestion: String?, suggestedCapo: Int, audio: AudioFile,
-                    mismatch: Boolean, onCapo: (Int) -> Unit, onPickFile: () -> Unit) {
-    val capoNotice = capoNotice(analysed, capo)
-    if (capoNotice != null || suggestion != null) {
-        Notice {
-            capoNotice?.let { Text(it) }
-            if (suggestion != null) {
-                Text(suggestion)
-                TextButton(onClick = { onCapo(suggestedCapo) }) { Text("Use capo $suggestedCapo") }
-            }
-        }
-    }
-    if (audio == AudioFile.MISSING) {
-        Notice {
-            Text(FILE_MISSING)
-            Button(onClick = onPickFile) { Text("Pick the file") }
-        }
-    }
-    if (mismatch) Notice { Text(FILE_MISMATCH, color = MaterialTheme.colorScheme.error) }
-}
-
-@Composable
-private fun Notice(content: @Composable () -> Unit) {
-    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { content() }
-    }
-}
-
-@Composable
-private fun Transport(time: () -> Double, duration: Double, playing: Boolean, clock: PlaybackClock) {
-    val rate by clock.rate.collectAsState()
-    Surface(tonalElevation = 3.dp) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { clock.toggle() }, modifier = Modifier.testTag("play")) { Text(if (playing) "Pause" else "Play") }
-            TimeText(time, duration, Modifier.weight(1f))
-            for (speed in PlaybackClock.SPEEDS) {
-                FilterChip(selected = rate == speed, onClick = { clock.setRate(speed) },
-                           label = { Text(String.format(Locale.ROOT, "%s×", speed.toString().removeSuffix(".0"))) })
-            }
-        }
-    }
-}
-
-/** Its own scope, so that only this text follows the clock every frame. */
-@Composable
-private fun TimeText(time: () -> Double, duration: Double, modifier: Modifier) {
-    Text("${formatTime(time())} / ${formatTime(duration)}", modifier = modifier.testTag("time"))
-}
+/** The chord strip's height, which the portrait stage's 40% does not include. */
+private val STRIP_HEIGHT = 72.dp

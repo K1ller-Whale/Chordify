@@ -14,6 +14,9 @@ import com.arbaba.chordifymobile.engine.analysis.modelIds
 import com.arbaba.chordifymobile.work.AnalysisNotification
 import com.arbaba.chordifymobile.work.EngineHolder
 import com.arbaba.chordifymobile.work.WorkJobScheduler
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 class ChordifyApp : Application() {
     lateinit var container: AppContainer
@@ -32,6 +35,10 @@ class AppContainer(context: Context) {
     val database: LibraryDatabase = Room.databaseBuilder(app, LibraryDatabase::class.java, "library.db").build()
     val engine = EngineHolder(app)
     val settings = Settings(app)
+
+    /** Work that must outlive a screen, on the main thread: importing a shared or opened file,
+     *  which a relaunch of the activity must not cancel. Lives as long as the process. */
+    val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private fun asset(path: String) = app.assets.open(path).use { it.readBytes().decodeToString() }
     private val chordBundle by lazy { ChordBundle.parse(asset("${ChordModel.BUNDLE}/bundle.json")) }

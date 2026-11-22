@@ -13,6 +13,7 @@ import com.arbaba.chordifymobile.engine.model.toJson
 import com.arbaba.chordifymobile.playback.decodePeaks
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
@@ -82,10 +83,14 @@ class Library(
         val sha256 = sha256(uri)
         reuse(sha256, options)?.let { return@withContext it }
         val id = newId()
-        val (fileUri, owns) = keep(uri, id, name)
-        add(Analysis(id, name, fileUri.toString(), owns, sha256, clock(), modelFingerprint = fingerprint,
-                     vocabulary = options.vocabulary, predictions = options.predictions,
-                     minSegmentBeats = options.minSegmentBeats))
+        // Once the file is being kept, its row is written too, even if the caller is cancelled
+        // meanwhile: a copy in importsDir without a row would never be deleted.
+        withContext(NonCancellable) {
+            val (fileUri, owns) = keep(uri, id, name)
+            add(Analysis(id, name, fileUri.toString(), owns, sha256, clock(), modelFingerprint = fingerprint,
+                         vocabulary = options.vocabulary, predictions = options.predictions,
+                         minSegmentBeats = options.minSegmentBeats))
+        }
         id
     }
 
@@ -219,7 +224,12 @@ class Library(
         }
         importsDir.mkdirs()
         val copy = File(importsDir, "$id.${name.substringAfterLast('.', "audio")}")
-        open(uri).use { input -> copy.outputStream().use { input.copyTo(it) } }
+        try {
+            open(uri).use { input -> copy.outputStream().use { input.copyTo(it) } }
+        } catch (error: Exception) {
+            copy.delete() // no half copy is left behind
+            throw error
+        }
         return Uri.fromFile(copy) to true
     }
 

@@ -28,7 +28,6 @@ class AnalysisTextTest {
         assertEquals("1 beat until the change (0.6 s)", countdown(chord, beats, 1.4))
         assertEquals("0 beats until the change (0.0 s)", countdown(chord, beats, 2.5))
         assertEquals("", countdown(chord.copy(label = "N"), beats, 0.5))
-        assertEquals(0.25f, elapsed(chord, 0.5), 1e-6f)
     }
 
     @Test
@@ -64,5 +63,25 @@ class AnalysisTextTest {
         assertNull(suggestionNotice(CapoSuggestion(5, 1.0), 5))
         assertNull(suggestionNotice(CapoSuggestion(0, 0.75), 0))
         assertEquals("Guitar chord diagram, frets x 3 2 0 1 0, counted from a capo on fret 2", diagramDescription(listOf(-1, 3, 2, 0, 1, 0), 2))
+    }
+
+    @Test
+    fun theM7LinesAreWorded() {
+        assertEquals("I · Tonic", theoryLine(c, Notation.LETTERS))
+        assertEquals("C · Tonic", theoryLine(c, Notation.ROMAN))
+        assertEquals("No chord", theoryLine(c.copy(label = "N"), Notation.LETTERS))
+        assertEquals("Capo 2 · sounds as Bb", soundsAsLine(c, 2, "Bb"))
+        assertNull(soundsAsLine(c, 0, "Bb"))
+        assertEquals("Capo: none", capoLabel(0))
+        assertEquals("Capo: fret 3", capoLabel(3))
+        assertEquals("fret 5  ★ 100% open chords", capoMenuLabel(5, CapoSuggestion(5, 1.0)))
+        assertEquals("none", capoMenuLabel(0, CapoSuggestion(5, 1.0)))
+        assertEquals("fret 5", capoMenuLabel(5, CapoSuggestion(0, 1.0)))
+        assertEquals("C major · 118 BPM · 4/4", songFacts(loop))
+        assertEquals(songFacts(loop) + " · 0:08 · 4 chords", songDetails(loop))
+        assertEquals("0.5×", speedLabel(0.5))
+        assertEquals("0.75×", speedLabel(0.75))
+        assertEquals("1×", speedLabel(1.0))
+        assertEquals("1.25×", speedLabel(1.25))
     }
 }

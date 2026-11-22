@@ -9,11 +9,17 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -32,7 +38,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.arbaba.chordifymobile.ChordifyApp
-import com.arbaba.chordifymobile.ui.analysis.CardTitle
+import com.arbaba.chordifymobile.data.ScreenOrientation
+import com.arbaba.chordifymobile.ui.ScreenTopBar
+import com.arbaba.chordifymobile.ui.SectionTitle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -62,23 +70,31 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    val screen: StateFlow<ScreenOrientation> = container.settings.screenOrientation
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ScreenOrientation.LANDSCAPE)
+
     fun setMajorMinorOnly(value: Boolean) = viewModelScope.launch { container.settings.setMajorMinorOnly(value) }
+
+    fun setScreen(value: ScreenOrientation) = viewModelScope.launch { container.settings.setScreenOrientation(value) }
 }
 
-/** The Settings tab: the analysis default, the space the library takes, and About. */
+/** Settings (M7 spec §4.5): a plain list: the analysis default, the screen orientation, the space the library takes, and About. */
 @Composable
-fun SettingsScreen(onAbout: () -> Unit, model: SettingsViewModel = viewModel()) {
+fun SettingsScreen(onAbout: () -> Unit, onBack: () -> Unit = {}, model: SettingsViewModel = viewModel()) {
     val majorMinorOnly by model.majorMinorOnly.collectAsStateWithLifecycle()
+    val screen by model.screen.collectAsStateWithLifecycle()
     val storage by model.storage.collectAsStateWithLifecycle()
-    SettingsContent(majorMinorOnly, model::setMajorMinorOnly, storage, onAbout)
+    SettingsContent(majorMinorOnly, model::setMajorMinorOnly, screen, model::setScreen, storage, onAbout, onBack)
 }
 
 @Composable
-fun SettingsContent(majorMinorOnly: Boolean, onMajorMinorOnly: (Boolean) -> Unit, storage: String?, onAbout: () -> Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CardTitle("Analysis")
+fun SettingsContent(majorMinorOnly: Boolean, onMajorMinorOnly: (Boolean) -> Unit, screen: ScreenOrientation,
+                    onScreen: (ScreenOrientation) -> Unit, storage: String?, onAbout: () -> Unit, onBack: () -> Unit = {}) {
+    Column(Modifier.fillMaxSize()) {
+        ScreenTopBar("Settings", onBack)
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionTitle("Analysis")
                 Row(Modifier.fillMaxWidth().toggleable(majorMinorOnly, role = Role.Switch, onValueChange = onMajorMinorOnly)
                         .testTag("majorMinorOnly"),
                     verticalAlignment = Alignment.CenterVertically) {
@@ -89,19 +105,31 @@ fun SettingsContent(majorMinorOnly: Boolean, onMajorMinorOnly: (Boolean) -> Unit
                     Switch(checked = majorMinorOnly, onCheckedChange = null)
                 }
             }
-        }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CardTitle("Storage")
+            Column(Modifier.selectableGroup(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SectionTitle("Screen")
+                for (option in ScreenOrientation.entries) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .selectable(option == screen, role = Role.RadioButton, onClick = { onScreen(option) })
+                            .testTag("screen-${option.name}"),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(selected = option == screen, onClick = null)
+                        Text(option.label, Modifier.padding(start = 12.dp))
+                    }
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionTitle("Storage")
                 Text(storage ?: "Counting…")
                 Text("Everything stays on this phone. Deleting an analysis in the Library frees its space.",
                      style = MaterialTheme.typography.bodySmall)
             }
-        }
-        Card(Modifier.fillMaxWidth().clickable(onClickLabel = "Open", onClick = onAbout).testTag("about")) {
-            Column(Modifier.padding(16.dp)) {
-                Text("About Chordify", fontWeight = FontWeight.SemiBold)
-                Text("Licence, source code, third-party software and credits", style = MaterialTheme.typography.bodySmall)
+            Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClickLabel = "Open", onClick = onAbout).testTag("about"),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("About Chordify", fontWeight = FontWeight.SemiBold)
+                    Text("Licence, source code, third-party software and credits", style = MaterialTheme.typography.bodySmall)
+                }
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
             }
         }
     }
@@ -109,34 +137,35 @@ fun SettingsContent(majorMinorOnly: Boolean, onMajorMinorOnly: (Boolean) -> Unit
 
 /** About (spec §6.2): licence, source, third-party notices and dataset credits. */
 @Composable
-fun AboutScreen() {
+fun AboutScreen(onBack: () -> Unit = {}) {
     val context = LocalContext.current
     val container = (context.applicationContext as ChordifyApp).container
     val version = context.packageManager.getPackageInfo(context.packageName, 0).versionName.orEmpty()
     AboutContent(version, container.modelIds, onSource = {
         context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(SOURCE_URL)))
-    })
+    }, onBack = onBack)
 }
 
 @Composable
-fun AboutContent(version: String, models: Map<String, String>, onSource: () -> Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Chordify", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Version $version", style = MaterialTheme.typography.bodySmall)
-        Text("Chordify finds the chords, the beat and the key of a song on your phone. Nothing is sent anywhere: " +
-             "the app has no network access.")
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CardTitle("Licence")
+fun AboutContent(version: String, models: Map<String, String>, onSource: () -> Unit, onBack: () -> Unit = {}) {
+    Column(Modifier.fillMaxSize()) {
+        ScreenTopBar("About", onBack)
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Chordify", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Version $version", style = MaterialTheme.typography.bodySmall)
+                Text("Chordify finds the chords, the beat and the key of a song on your phone. Nothing is sent anywhere: " +
+                     "the app has no network access.")
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionTitle("Licence")
                 Text("Chordify is free software under the GNU General Public License, version 3 or later " +
                      "(GPL-3.0-or-later). You may share and change it under its terms. It bundles NNLS Chroma, " +
                      "which is GPL-2.0-or-later.")
                 TextButton(onClick = onSource) { Text("Source code") }
             }
-        }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CardTitle("Third-party software")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionTitle("Third-party software")
                 for (notice in NOTICES) {
                     Column {
                         Text("${notice.name} · ${notice.licence}", fontWeight = FontWeight.SemiBold)
@@ -144,16 +173,12 @@ fun AboutContent(version: String, models: Map<String, String>, onSource: () -> U
                     }
                 }
             }
-        }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CardTitle("Datasets")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionTitle("Datasets")
                 Text(DATASET_CREDITS)
             }
-        }
-        Card(Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                CardTitle("Models")
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                SectionTitle("Models")
                 for ((role, id) in models) Text("$role: $id", style = MaterialTheme.typography.bodySmall)
             }
         }

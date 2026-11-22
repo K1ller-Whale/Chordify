@@ -25,6 +25,13 @@ class QuickChordTest {
     }
 
     @Test
+    fun theRecordingTimeShowsWhenItStopsByItself() {
+        assertEquals("0.0 of 3 s", recordingTime(0.0))
+        assertEquals("1.2 of 3 s", recordingTime(1.24))
+        assertEquals("3.0 of 3 s", recordingTime(RECORD_SECONDS))
+    }
+
+    @Test
     fun aClipIsCollectedWholeAndItsLevelMeasured() {
         val sink = CollectingSink()
         sink.write(floatArrayOf(1f, 2f, 3f), 2)

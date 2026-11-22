@@ -7,45 +7,51 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.IntentCompat
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.arbaba.chordifymobile.data.Settings
 import com.arbaba.chordifymobile.data.isAnalysisExport
 import com.arbaba.chordifymobile.quick.QuickChordScreen
 import com.arbaba.chordifymobile.songwriter.SongwriterScreen
+import com.arbaba.chordifymobile.ui.AppBackground
 import com.arbaba.chordifymobile.ui.ChordifyTheme
 import com.arbaba.chordifymobile.ui.analysis.AnalysisScreen
 import com.arbaba.chordifymobile.ui.settings.AboutScreen
 import com.arbaba.chordifymobile.ui.settings.SettingsScreen
 import com.arbaba.chordifymobile.ui.library.LibraryScreen
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        val container = (application as ChordifyApp).container
+        // The Screen setting is applied before the window exists (the manifest's sensorLandscape is
+        // the default for a first start). One small DataStore read per creation. The activity
+        // handles orientation and size changes itself (manifest configChanges), so turning to the
+        // setting's orientation re-lays the UI out instead of relaunching the activity.
+        requestedOrientation = runBlocking { container.settings.screenOrientation.first() }.activityOrientation
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { ChordifyTheme { ChordifyNavigation() } }
+        lifecycleScope.launch { // later changes of the setting
+            repeatOnLifecycle(Lifecycle.State.CREATED) {
+                container.settings.screenOrientation.distinctUntilChanged().collect { requestedOrientation = it.activityOrientation }
+            }
+        }
+        setContent { ChordifyTheme { AppBackground { ChordifyNavigation() } } }
         if (savedInstanceState == null) importShared(intent)
     }
 
@@ -55,20 +61,25 @@ class MainActivity : ComponentActivity() {
     }
 
     /** "Share to" (ACTION_SEND) and "Open with" (ACTION_VIEW): an audio file is analysed, a .json
-     *  export is added as it is. */
+     *  export is added as it is. The import runs in the app's scope, not the activity's, so that a
+     *  relaunch (a rotation, a change of the Screen setting) cannot cancel it half-way. */
     private fun importShared(intent: Intent) {
         val uri = sharedFile(intent) ?: return
-        val container = (application as ChordifyApp).container
-        lifecycleScope.launch {
+        val app = application as ChordifyApp
+        val container = app.container
+        val type = intent.type ?: contentResolver.getType(uri)
+        container.scope.launch {
             try {
-                if (isAnalysisExport(intent.type ?: contentResolver.getType(uri), uri.lastPathSegment)) {
+                if (isAnalysisExport(type, uri.lastPathSegment)) {
                     container.library.importAnalysis(uri)
-                    Toast.makeText(this@MainActivity, "The analysis is in the Library.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(app, "The analysis is in the Library.", Toast.LENGTH_SHORT).show()
                 } else {
                     container.library.import(uri, Settings.options(container.settings.majorMinorOnly.first()))
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
-                Toast.makeText(this@MainActivity, "Could not read this file: ${error.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(app, "Could not read this file: ${error.message}", Toast.LENGTH_LONG).show()
             }
         }
     }
@@ -83,43 +94,27 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private enum class Tab(val route: String, val label: String, val icon: ImageVector) {
-    LIBRARY("library", "Library", Icons.AutoMirrored.Filled.List),
-    QUICK_CHORD("quick", "Quick chord", Icons.Filled.Star),
-    SONGWRITER("write", "Songwriter", Icons.Filled.Edit),
-    SETTINGS("settings", "Settings", Icons.Filled.Settings),
-}
-
-/** The four tabs of spec §6.2; the analysis screen opens from the Library, About from Settings. */
+/** The Library is home; the other screens open from it, and Back returns to it (M7 spec §4.1). */
 @Composable
 fun ChordifyNavigation() {
     val navigation = rememberNavController()
-    val current by navigation.currentBackStackEntryAsState()
-    Scaffold(bottomBar = {
-        NavigationBar {
-            for (tab in Tab.entries) {
-                NavigationBarItem(
-                    selected = current?.destination?.route == tab.route,
-                    onClick = {
-                        navigation.navigate(tab.route) {
-                            popUpTo(navigation.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    icon = { Icon(tab.icon, contentDescription = null) },
-                    label = { Text(tab.label) },
-                )
-            }
+    val back: () -> Unit = { navigation.popBackStack() }
+    NavHost(
+        navigation, startDestination = "library",
+        modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
+    ) {
+        composable("library") {
+            LibraryScreen(
+                onOpen = { navigation.navigate("analysis/$it") },
+                onQuickChord = { navigation.navigate("quick") },
+                onSongwriter = { navigation.navigate("write") },
+                onSettings = { navigation.navigate("settings") },
+            )
         }
-    }) { padding ->
-        NavHost(navigation, startDestination = Tab.LIBRARY.route, modifier = Modifier.padding(padding)) {
-            composable(Tab.LIBRARY.route) { LibraryScreen(onOpen = { navigation.navigate("analysis/$it") }) }
-            composable("analysis/{id}") { entry -> AnalysisScreen(entry.arguments!!.getString("id")!!) }
-            composable(Tab.QUICK_CHORD.route) { QuickChordScreen() }
-            composable(Tab.SONGWRITER.route) { SongwriterScreen() }
-            composable(Tab.SETTINGS.route) { SettingsScreen(onAbout = { navigation.navigate("about") }) }
-            composable("about") { AboutScreen() }
-        }
+        composable("analysis/{id}") { entry -> AnalysisScreen(entry.arguments!!.getString("id")!!, onBack = back) }
+        composable("quick") { QuickChordScreen(onBack = back) }
+        composable("write") { SongwriterScreen(onBack = back) }
+        composable("settings") { SettingsScreen(onAbout = { navigation.navigate("about") }, onBack = back) }
+        composable("about") { AboutScreen(onBack = back) }
     }
 }
