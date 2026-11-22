@@ -15,6 +15,7 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -45,7 +46,7 @@ import com.arbaba.chordifymobile.playback.PlaybackClock
 import com.arbaba.chordifymobile.ui.LocalChordifyColors
 import kotlin.math.max
 
-/** Play/pause, the time, the seek bar (the whole song in function colours) and the speed chip.
+/** Play/pause, the time, the Loop chord chip (only when [looping] is not null), the seek bar (the whole song in function colours) and the speed chip.
  *  [visibleSeconds] is how many seconds the strip shows, outlined on the seek bar. */
 @Composable
 fun TransportBar(result: AnalysisResult, time: State<Double>, playing: Boolean, rate: Double,
@@ -62,6 +63,9 @@ fun TransportBar(result: AnalysisResult, time: State<Double>, playing: Boolean, 
             else Icon(Icons.Filled.PlayArrow, contentDescription = null)
         }
         TimeText(time, result.source.duration)
+        if (looping != null) {
+            FilterChip(selected = looping, onClick = onLoop, label = { Text("Loop chord", maxLines = 1) }, modifier = Modifier.testTag("loop"))
+        }
         SeekBar(result, time, visibleSeconds, onSeek, Modifier.weight(1f))
         SpeedChip(rate, onRate)
     }

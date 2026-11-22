@@ -2,7 +2,11 @@ package com.arbaba.chordifymobile.ui.analysis
 
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -75,6 +79,36 @@ class TransportBarTest {
     @Test fun fitsPortraitToo() {
         showBar(size = PORTRAIT)
         rule.onNodeWithTag("seekBar").assertExists()
+        rule.assertEveryControlNamed()
+    }
+
+    private var loops = 0
+
+    private fun showLooping(looping: Boolean?, size: androidx.compose.ui.unit.DpSize = LANDSCAPE) = rule.show(size) {
+        TransportBar(Fixtures.loop, time, false, 1.0, 4.0, { }, { }, { }, looping = looping, onLoop = { loops++ })
+    }
+
+    @Test fun loopChipIsHiddenWhenNotEditing() {
+        showLooping(null)
+        rule.onAllNodes(hasTestTag("loop")).assertCountEquals(0)
+    }
+
+    @Test fun loopChipCallsBackAndShowsNotSelected() {
+        showLooping(false)
+        rule.onNodeWithText("Loop chord").assertExists()
+        rule.onNodeWithTag("loop").assertIsNotSelected().performClick()
+        assertEquals(1, loops)
+    }
+
+    @Test fun loopChipShowsSelectedWhenLooping() {
+        showLooping(true)
+        rule.onNodeWithTag("loop").assertIsSelected()
+    }
+
+    @Test fun loopChipFitsPortraitAndIsNamed() {
+        showLooping(true, PORTRAIT)
+        rule.onNodeWithTag("seekBar").assertExists()
+        rule.onNodeWithTag("loop").assertExists()
         rule.assertEveryControlNamed()
     }
 }
