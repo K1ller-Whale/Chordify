@@ -240,7 +240,7 @@ fun editsFile(id: String): File                                  // File(results
 suspend fun edits(id: String): EditsLoad                         // None if no file; Damaged if decodeEdits throws
 suspend fun saveEdits(id: String, edits: ChordEdits)             // atomic: "$id.edits.json.part" then rename; throws IOException
 suspend fun clearEdits(id: String)                               // deletes the edits file
-internal suspend fun importAnalysisText(text: String, fallbackName: String): String  // importAnalysis(uri) reads text and calls this
+internal suspend fun importAnalysisText(text: String, fallbackName: () -> String): String  // importAnalysis(uri) reads text and calls this; fallbackName is called only when the export names no title/filename
 ```
 
 `delete(id)` also deletes the edits file.
@@ -929,7 +929,7 @@ root means "none". `No chord` is `"N"`.
   - [ ] `AccessibilityTest`: run `assertEveryControlNamed()` on the editing screen, the picker and
     the shape editor.
   - [ ] `ChordEditingDeviceTest` (emulator):
-    - put a completed analysis in the library through `library.importAnalysisText(jsonText(result), "loop")`.
+    - put a completed analysis in the library through `library.importAnalysisText(jsonText(result)) { "loop" }`.
       Get `result` by analysing `goldens/audio/loop.wav` (androidTest resources come from
       `../engine/src/test/resources`; see how the existing `DT/ExportDeviceTest.kt` or
       `DT/ImportDeviceTest.kt` obtain a result);
