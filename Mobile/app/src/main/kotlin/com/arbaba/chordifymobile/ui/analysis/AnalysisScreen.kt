@@ -1,6 +1,7 @@
 package com.arbaba.chordifymobile.ui.analysis
 
 import android.app.Application
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.focusable
@@ -15,7 +16,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -56,7 +60,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.arbaba.chordifymobile.data.Analysis
 import com.arbaba.chordifymobile.data.ExportFormat
 import com.arbaba.chordifymobile.data.Status
+import com.arbaba.chordifymobile.edit.DISCARD_CONFIRM
+import com.arbaba.chordifymobile.edit.EDITS_UNREADABLE
+import com.arbaba.chordifymobile.edit.EditActions
+import com.arbaba.chordifymobile.edit.EditUiState
+import com.arbaba.chordifymobile.edit.NoEditActions
+import com.arbaba.chordifymobile.edit.RESTORE_CONFIRM
+import com.arbaba.chordifymobile.edit.SAVE_FAILED
+import com.arbaba.chordifymobile.edit.shapeLabelOf
+import com.arbaba.chordifymobile.edit.soundingLabel
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
+import com.arbaba.chordifymobile.music.guitarShape
+import com.arbaba.chordifymobile.music.shapeKey
 import com.arbaba.chordifymobile.music.Notation
 import com.arbaba.chordifymobile.music.chordIndexAt
 import com.arbaba.chordifymobile.music.isNoChord
@@ -78,6 +93,10 @@ fun AnalysisScreen(id: String, onBack: () -> Unit = {}) {
     val audio by model.audio.collectAsStateWithLifecycle()
     val mismatch by model.mismatch.collectAsStateWithLifecycle()
     val peaks by model.peaks.collectAsStateWithLifecycle()
+    val hasEdits by model.hasEdits.collectAsStateWithLifecycle()
+    val savedShapes by model.savedShapes.collectAsStateWithLifecycle()
+    val editsDamaged by model.editsDamaged.collectAsStateWithLifecycle()
+    val edit by model.edit.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) model.attach(uri) }
     val analysis = row
@@ -102,6 +121,11 @@ fun AnalysisScreen(id: String, onBack: () -> Unit = {}) {
         peaks = peaks,
         onExport = { format -> model.export(format) { context.startActivity(it) } },
         onBack = onBack,
+        shapes = savedShapes,
+        hasEdits = hasEdits,
+        editsDamaged = editsDamaged,
+        edit = edit,
+        editActions = model,
     )
 }
 
@@ -150,8 +174,19 @@ fun AnalysisContent(
     peaks: FloatArray? = null,
     onExport: (ExportFormat) -> Unit = {},
     onBack: () -> Unit = {},
+    shapes: Map<String, List<Int>> = emptyMap(),
+    hasEdits: Boolean = false,
+    editsDamaged: Boolean = false,
+    edit: EditUiState? = null,
+    editActions: EditActions = NoEditActions,
 ) {
-    val result = remember(analysed, capo) { withCapo(analysed, capo) }
+    val preview = edit?.preview
+    val result = remember(analysed, capo, preview) { withCapo(preview ?: analysed, capo) }
+    val shown = if (edit != null) edit.shapes else shapes
+    val flats = remember(analysed, capo) { shapeKey(analysed.key.global.tonic, analysed.key.global.mode, capo).flats }
+    var dialog by remember { mutableStateOf<EditDialog?>(null) }
+    val cancelEdit = { if (edit?.dirty == true) dialog = EditDialog.DISCARD else editActions.cancelEditing() }
+    BackHandler(enabled = edit != null) { cancelEdit() }
     val suggestion = remember(analysed) { suggestCapo(analysed.chords) }
     // The time is read by small scopes only (the Chord panel's countdown, the strip, the seek bar
     // and the time text), so the rest of the screen recomposes when the chord changes, not every
@@ -162,7 +197,7 @@ fun AnalysisContent(
     val starts = remember(result) { result.chords.map { it.start } }
     val index by remember(starts) { derivedStateOf { chordIndexAt(starts, time.value) } }
     val chord = result.chords[index]
-    val sounding = analysed.chords.getOrNull(index)?.display
+    val sounding = (preview ?: analysed).chords.getOrNull(index)?.display
     val chordsByDisplay = remember(result) { result.chords.filter { !isNoChord(it.label) }.associateBy { it.display } }
     val surprising = remember(result) { surprisingChords(result.chords) }
     val barStarts = remember(result) { result.bars.map { it.start } }
@@ -185,7 +220,7 @@ fun AnalysisContent(
 
     // The web's shortcuts: Space plays or pauses, the arrows jump between chords, R toggles Roman numerals.
     val keys = Modifier.focusRequester(focus).focusable().onPreviewKeyEvent { event ->
-        if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+        if (edit != null || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
         when (event.key) {
             Key.Spacebar -> clock.toggle()
             Key.DirectionRight -> clock.seek(chordStep(starts, clock.time.value, 1))
@@ -198,14 +233,36 @@ fun AnalysisContent(
 
     // The no-audio banner (when there is one) above the stage, so it hides none of it; then the chord strip.
     val stageColumn: @Composable ColumnScope.() -> Unit = {
+        if (editsDamaged) EditsDamagedBanner(Modifier.padding(start = 8.dp, top = 8.dp, end = 8.dp))
         NoAudioBanner(audio, mismatch, onPickFile, Modifier.padding(start = 8.dp, top = 8.dp, end = 8.dp))
         Stage(chord, notation, capo, sounding, onSwipe = { clock.seek(chordStep(starts, clock.time.value, it)) },
-              modifier = Modifier.weight(1f).fillMaxWidth())
-        ChordStrip(result, time, index, notation, peaks, surprising, onSeek = { clock.seek(it) })
+              modifier = Modifier.weight(1f).fillMaxWidth(), shape = shown[chord.label] ?: guitarShape(chord))
+        ChordStrip(result, time, index, notation, peaks, surprising, onSeek = { clock.seek(it) },
+                   editing = edit != null, selected = edit?.selected, onSelect = editActions::select,
+                   onMoveEdge = editActions::moveEdge)
     }
     // The tab row over the selected panel. Compact tabs (labelLarge, 4 dp padding instead of
     // Material's 16 dp) so that all five labels fit in the 40% of a landscape phone.
-    val panelColumn: @Composable ColumnScope.() -> Unit = {
+    val editColumn: @Composable ColumnScope.() -> Unit = {
+        edit?.saveError?.let {
+            Text(SAVE_FAILED + it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(8.dp).testTag("saveError"))
+        }
+        val picked = edit?.selected?.takeIf { it in result.chords.indices }
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            if (picked == null) {
+                Text("Tap a chord in the strip to change it.", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(16.dp).testTag("editHint"))
+            } else {
+                EditPanel(result.chords[picked], picked, result.chords.size, notation, result.beats, { time.value },
+                    onSetStart = { editActions.setStart(picked, it) }, onSetEnd = { editActions.setEnd(picked, it) },
+                    onSplit = { editActions.split(picked, time.value) }, onMergeWithNext = { editActions.mergeWithNext(picked) },
+                    onChangeChord = { dialog = EditDialog.PICKER }, onEditShape = { dialog = EditDialog.SHAPE },
+                    modifier = Modifier.fillMaxSize())
+            }
+        }
+    }
+    val tabColumn: @Composable ColumnScope.() -> Unit = {
         PrimaryTabRow(selectedTabIndex = tab.ordinal) {
             for (entry in PanelTab.entries) {
                 Tab(selected = tab == entry, onClick = { tab = entry }, modifier = Modifier.height(48.dp).testTag("tab-${entry.name}")) {
@@ -224,9 +281,13 @@ fun AnalysisContent(
             }
         }
     }
+    val panelColumn = if (edit != null) editColumn else tabColumn
 
     Column(Modifier.fillMaxSize().then(keys).testTag("analysis")) {
-        AnalysisTopBar(title, analysed, capo, suggestion, notation, onBack, onCapo, onNotation, onExport, onPickFile)
+        AnalysisTopBar(title, analysed, capo, suggestion, notation, onBack, onCapo, onNotation, onExport, onPickFile,
+            editing = edit != null, canUndo = edit?.canUndo == true, canRedo = edit?.canRedo == true, hasEdits = hasEdits,
+            onEdit = editActions::startEditing, onUndo = editActions::undo, onRedo = editActions::redo,
+            onCancelEdit = { cancelEdit() }, onDone = editActions::done, onRestore = { dialog = EditDialog.RESTORE })
         AdaptiveLayout(Modifier.weight(1f).fillMaxWidth()) { landscape ->
             val stageArea = Modifier.onSizeChanged { stageWidthPx = it.width.toFloat() }.testTag("stageArea")
             if (landscape) {
@@ -246,7 +307,54 @@ fun AnalysisContent(
             }
         }
         TransportBar(result, time, playing, rate, visibleSeconds, onToggle = clock::toggle, onSeek = clock::seek,
-                     onRate = clock::setRate)
+                     onRate = clock::setRate, looping = edit?.looping, onLoop = editActions::toggleLoop)
+    }
+
+    val selected = edit?.selected?.takeIf { it in result.chords.indices }
+    when (dialog) {
+        EditDialog.PICKER -> if (selected != null) {
+            val label = result.chords[selected].label
+            var suggestions by remember(selected, preview) { mutableStateOf(emptyList<String>()) }
+            LaunchedEffect(selected, preview) {
+                suggestions = editActions.suggestions(selected).map { shapeLabelOf(it, capo, flats) }
+            }
+            ChordPicker(current = label, suggestions = suggestions, key = result.key.global, flats = flats,
+                onPick = { dialog = null; editActions.rename(selected, pickToRename(it, capo, flats)) },
+                onCancel = { dialog = null })
+        }
+        EditDialog.SHAPE -> if (selected != null) {
+            val chosen = result.chords[selected]
+            ShapeEditor(label = chosen.label, shape = shown[chosen.label], defaultShape = guitarShape(chosen), capo = capo,
+                onSave = { dialog = null; editActions.setShape(chosen.label, it) }, onCancel = { dialog = null })
+        }
+        EditDialog.DISCARD -> ConfirmDialog(DISCARD_CONFIRM, "Discard", "Keep editing", "discardDialog",
+            onConfirm = { dialog = null; editActions.cancelEditing() }, onDismiss = { dialog = null })
+        EditDialog.RESTORE -> ConfirmDialog(RESTORE_CONFIRM, "Restore", "Keep my chords", "restoreDialog",
+            onConfirm = { dialog = null; editActions.restore() }, onDismiss = { dialog = null })
+        null -> {}
+    }
+}
+
+/** The dialogs the analysis screen can have open. */
+private enum class EditDialog { PICKER, SHAPE, DISCARD, RESTORE }
+
+/** The sounding label for a [picked] shown label: the picker shows the shapes to play with the capo on. */
+internal fun pickToRename(picked: String, capo: Int, flats: Boolean): String = soundingLabel(picked, capo, flats)
+
+@Composable
+private fun ConfirmDialog(text: String, confirm: String, dismiss: String, tag: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(onDismissRequest = onDismiss, modifier = Modifier.testTag(tag), text = { Text(text) },
+        confirmButton = { TextButton(onClick = onConfirm) { Text(confirm) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(dismiss) } })
+}
+
+/** The slim banner shown when the song's saved edits could not be read. */
+@Composable
+private fun EditsDamagedBanner(modifier: Modifier = Modifier) {
+    Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(8.dp),
+        modifier = modifier.fillMaxWidth().testTag("editsDamaged")) {
+        Text(EDITS_UNREADABLE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
     }
 }
 

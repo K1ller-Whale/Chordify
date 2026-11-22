@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -22,6 +23,15 @@ import androidx.compose.ui.unit.DpSize
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.arbaba.chordifymobile.data.Analysis
 import com.arbaba.chordifymobile.data.Status
+import com.arbaba.chordifymobile.edit.DISCARD_CONFIRM
+import com.arbaba.chordifymobile.edit.EDITS_UNREADABLE
+import com.arbaba.chordifymobile.edit.EditActions
+import com.arbaba.chordifymobile.edit.EditUiState
+import com.arbaba.chordifymobile.edit.RESTORE_CONFIRM
+import com.arbaba.chordifymobile.edit.SAVE_FAILED
+import com.arbaba.chordifymobile.edit.shapeLabelOf
+import com.arbaba.chordifymobile.edit.soundingLabel
+import com.arbaba.chordifymobile.edit.spansOf
 import com.arbaba.chordifymobile.music.Notation
 import com.arbaba.chordifymobile.playback.PlaybackClock
 import com.arbaba.chordifymobile.ui.Fixtures
@@ -132,5 +142,126 @@ class AnalysisScreenTest {
         rule.show { AnalysisStatus(row, onRetry = {}) }
         rule.onNodeWithText("Could not analyse this audio").assertExists()
         rule.onNodeWithText("Try again").assertExists()
+    }
+
+    /** An [EditActions] that records the calls the screen makes. */
+    private class Recorder : EditActions {
+        val calls = mutableListOf<String>()
+        override fun startEditing() { calls += "start" }
+        override fun cancelEditing() { calls += "cancel" }
+        override fun done() { calls += "done" }
+        override fun restore() { calls += "restore" }
+        override fun select(index: Int?) { calls += "select $index" }
+        override fun moveEdge(edge: Int, time: Double) { calls += "moveEdge $edge" }
+        override fun setStart(index: Int, time: Double) { calls += "setStart $index" }
+        override fun setEnd(index: Int, time: Double) { calls += "setEnd $index" }
+        override fun split(index: Int, time: Double) { calls += "split $index" }
+        override fun mergeWithNext(index: Int) { calls += "merge $index" }
+        override fun rename(index: Int, soundingLabel: String) { calls += "rename $index $soundingLabel" }
+        override fun setShape(shapeLabel: String, shape: List<Int>?) { calls += "setShape $shapeLabel" }
+        override fun undo() { calls += "undo" }
+        override fun redo() { calls += "redo" }
+        override fun toggleLoop() { calls += "loop" }
+        override suspend fun suggestions(index: Int): List<String> = emptyList()
+    }
+
+    private fun editState(selected: Int? = null, dirty: Boolean = false, saveError: String? = null) =
+        EditUiState(spansOf(loop), emptyMap(), loop, selected, canUndo = true, canRedo = false, dirty = dirty,
+            looping = false, saveError = saveError)
+
+    private fun showEditing(actions: Recorder, edit: EditUiState? = editState(), hasEdits: Boolean = false,
+                            damaged: Boolean = false, size: DpSize = LANDSCAPE) = rule.show(size) {
+        AnalysisContent("Loop", loop, clock, Notation.LETTERS, 0, AudioFile.PLAYABLE, false,
+            onNotation = {}, onCapo = {}, onPickFile = {}, hasEdits = hasEdits, editsDamaged = damaged,
+            edit = edit, editActions = actions)
+    }
+
+    @Test fun editingShowsTheHintInPlaceOfTheTabs() {
+        showEditing(Recorder())
+        rule.onNodeWithText("Tap a chord in the strip to change it.").assertExists()
+        rule.onNodeWithTag("tab-CHORD").assertDoesNotExist()
+    }
+
+    @Test fun aSelectedChordHidesTheHintAndTheTabs() {
+        showEditing(Recorder(), editState(selected = 1))
+        rule.onNodeWithText("Tap a chord in the strip to change it.").assertDoesNotExist()
+        rule.onNodeWithTag("tab-CHORD").assertDoesNotExist()
+    }
+
+    @Test fun notEditingKeepsTheTabs() {
+        showEditing(Recorder(), edit = null)
+        rule.onNodeWithTag("tab-CHORD").assertExists()
+        rule.onNodeWithTag("editsDamaged").assertDoesNotExist()
+    }
+
+    @Test fun doneAndUndoReachTheActions() {
+        val actions = Recorder()
+        showEditing(actions)
+        rule.onNodeWithTag("undo").performClick()
+        rule.onNodeWithTag("done").performClick()
+        rule.runOnIdle { assertEquals(listOf("undo", "done"), actions.calls) }
+    }
+
+    @Test fun cancelWithoutChangesLeavesAtOnce() {
+        val actions = Recorder()
+        showEditing(actions)
+        rule.onNodeWithTag("cancelEdit").performClick()
+        rule.runOnIdle { assertEquals(listOf("cancel"), actions.calls) }
+        rule.onNodeWithText(DISCARD_CONFIRM).assertDoesNotExist()
+    }
+
+    @Test fun cancelWithChangesAsksFirst() {
+        val actions = Recorder()
+        showEditing(actions, editState(dirty = true))
+        rule.onNodeWithTag("cancelEdit").performClick()
+        rule.onNodeWithText(DISCARD_CONFIRM).assertExists()
+        rule.runOnIdle { assertTrue(actions.calls.isEmpty()) }
+        rule.onNodeWithText("Keep editing").performClick()
+        rule.onNodeWithText(DISCARD_CONFIRM).assertDoesNotExist()
+        rule.runOnIdle { assertTrue(actions.calls.isEmpty()) }
+        rule.onNodeWithTag("cancelEdit").performClick()
+        rule.onNodeWithText("Discard").performClick()
+        rule.runOnIdle { assertEquals(listOf("cancel"), actions.calls) }
+    }
+
+    @Test fun restoreAsksFirst() {
+        val actions = Recorder()
+        showEditing(actions, edit = null, hasEdits = true)
+        rule.onNodeWithTag("more").performClick()
+        rule.onNodeWithText("Restore the model's chords").performClick()
+        rule.onNodeWithText(RESTORE_CONFIRM).assertExists()
+        rule.onNodeWithText("Keep my chords").performClick()
+        rule.runOnIdle { assertTrue(actions.calls.isEmpty()) }
+        rule.onNodeWithTag("more").performClick()
+        rule.onNodeWithText("Restore the model's chords").performClick()
+        rule.onNodeWithText("Restore").performClick()
+        rule.runOnIdle { assertEquals(listOf("restore"), actions.calls) }
+    }
+
+    @Test fun damagedEditsShowABanner() {
+        showEditing(Recorder(), edit = null, damaged = true)
+        rule.onNodeWithTag("editsDamaged").assertIsDisplayed()
+        rule.onNodeWithText(EDITS_UNREADABLE).assertExists()
+    }
+
+    @Test fun aSaveErrorShows() {
+        showEditing(Recorder(), editState(saveError = "disk full"))
+        rule.onNodeWithTag("saveError").assertIsDisplayed()
+        rule.onNodeWithText(SAVE_FAILED + "disk full").assertExists()
+    }
+
+    @Test fun theKeyboardIsOffWhileEditing() {
+        showEditing(Recorder())
+        rule.onNodeWithTag("analysis").performKeyInput { pressKey(Key.Spacebar) }
+        rule.runOnIdle { assertFalse(clock.playing.value) }
+    }
+
+    @Test fun aPickIsConvertedToTheSoundingLabel() {
+        // capo 2: the shape G:maj sounds as A:maj; the picker's suggestions go the other way
+        assertEquals(soundingLabel("G:maj", 2, false), pickToRename("G:maj", 2, false))
+        assertEquals("A:maj", pickToRename("G:maj", 2, false))
+        assertEquals("G:maj", shapeLabelOf("A:maj", 2, false))
+        assertEquals("N", pickToRename("N", 2, false))
+        assertEquals("C:maj", pickToRename("C:maj", 0, false))
     }
 }
