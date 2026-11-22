@@ -48,7 +48,7 @@ class QuickChordScreenTest {
     @Test fun recordingShowsStopTheTimeAndTheLevel() {
         content(state = QuickState.Recording(1.24, 0.1f))
         rule.onNodeWithText("Stop").assertExists()
-        rule.onNodeWithText("1.2 s").assertExists()
+        rule.onNodeWithText("1.2 of 3 s").assertExists() // stops by itself at RECORD_SECONDS
         rule.onNode(hasContentDescriptionExactly("Input level")).assertExists()
         rule.onNodeWithText("Or pick a short clip").assertIsNotEnabled()
     }
