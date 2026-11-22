@@ -114,18 +114,18 @@ class Library(
             }
             out.toString(Charsets.UTF_8.name())
         }
-        importAnalysisText(text, displayNameOf(uri).removeSuffix(".json"))
+        importAnalysisText(text) { runCatching { displayNameOf(uri).removeSuffix(".json") }.getOrDefault("Imported analysis") }
     }
 
-    /** Adds the analysis in the export [text] as a completed row; [fallbackName] names it when the
+    /** Adds the analysis in the export [text] as a completed row; [fallbackName] is asked for its name only when the
      *  export has no title or filename. Returns the new row's id. */
-    internal suspend fun importAnalysisText(text: String, fallbackName: String): String = withContext(Dispatchers.IO) {
+    internal suspend fun importAnalysisText(text: String, fallbackName: () -> String): String = withContext(Dispatchers.IO) {
         val result = parseExport(text)
         val id = newId()
         resultsDir.mkdirs()
         resultFile(id).writeText(result.toJson())
         val key = result.key.global
-        val name = result.source.title ?: result.source.filename ?: fallbackName
+        val name = result.source.title ?: result.source.filename ?: fallbackName()
         dao.upsert(Analysis(id, name, fileUri = "", ownsFile = false, sha256 = result.source.sha256.orEmpty(),
                             createdAt = clock(), status = Status.COMPLETED, stage = "done", progress = 1.0,
                             modelFingerprint = IMPORTED, duration = result.source.duration,

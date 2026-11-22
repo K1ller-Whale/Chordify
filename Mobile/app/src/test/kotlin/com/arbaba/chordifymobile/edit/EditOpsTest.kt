@@ -64,9 +64,44 @@ class EditOpsTest {
     }
 
     @Test
-    fun equalNeighboursMergeAndKeepEitherEditedFlag() {
-        val out = normalise(listOf(span(0.0, 2.0, "C:maj"), span(2.0, 8.0, "C:maj", true)), 8.0)
-        assertEquals(listOf(span(0.0, 8.0, "C:maj", true)), out)
+    fun normaliseKeepsEqualNeighbours() {
+        val input = listOf(span(0.0, 2.0, "C:maj"), span(2.0, 8.0, "C:maj", true))
+        assertEquals(input, normalise(input, 8.0))
+    }
+
+    @Test
+    fun aSplitsHalvesStayWhenItsEdgeMoves() {
+        val out = moveEdge(split(four, 1, 3.0, 8.0), 2, 3.5, 8.0)
+        assertEquals(listOf("C:maj", "G:maj", "G:maj", "A:min", "F:maj"), out.map { it.label })
+        assertEquals(3.5, out[1].end, 1e-9)
+        assertEquals(3.5, out[2].start, 1e-9)
+    }
+
+    @Test
+    fun aSplitsHalvesStayWhenAnotherEdgeMoves() {
+        val out = moveEdge(split(four, 1, 3.0, 8.0), 4, 6.5, 8.0)
+        assertEquals(listOf("C:maj", "G:maj", "G:maj", "A:min", "F:maj"), out.map { it.label })
+        assertEquals(listOf(2.0, 3.0), out.subList(1, 3).map { it.start })
+    }
+
+    @Test
+    fun renamingAHalfToTheOtherNeighboursLabelMerges() {
+        val out = rename(split(four, 1, 3.0, 8.0), 2, "A:min", 8.0)
+        assertEquals(listOf(span(0.0, 2.0, "C:maj"), span(2.0, 3.0, "G:maj", true), span(3.0, 6.0, "A:min", true), four[3]), out)
+    }
+
+    @Test
+    fun collapsingASpanBetweenEqualOnesMergesThem() {
+        val aba = listOf(span(0.0, 2.0, "A:min"), span(2.0, 4.0, "G:maj"), span(4.0, 8.0, "A:min"))
+        val out = moveEdge(aba, 1, 4.0, 8.0)
+        assertEquals(listOf(span(0.0, 8.0, "A:min", true)), out)
+        val other = moveEdge(aba, 2, 2.0, 8.0)
+        assertEquals(listOf(span(0.0, 8.0, "A:min", true)), other)
+    }
+
+    @Test
+    fun movingToTheCurrentBoundaryChangesNothing() {
+        assertEquals(four, moveEdge(four, 1, 2.0, 8.0))
     }
 
     @Test

@@ -6,8 +6,8 @@ import com.arbaba.chordifymobile.music.transposeLabel
 import kotlin.math.abs
 
 // The pure operations behind chord editing (spec §3.3). Every one returns a normalised list:
-// sorted, touching, from 0 to the duration, no span shorter than MIN_SPAN_SECONDS and no two
-// neighbours with the same label.
+// sorted, touching, from 0 to the duration and no span shorter than MIN_SPAN_SECONDS. Equal-label
+// neighbours are kept (a split's halves); an operation that makes two meet merges them.
 
 /** The shortest chord an edit leaves; a shorter one gives its time to its neighbour. */
 const val MIN_SPAN_SECONDS = 0.05
@@ -53,29 +53,33 @@ fun normalise(spans: List<ChordSpan>, duration: Double): List<ChordSpan> {
             i++
         }
     }
-    val merged = ArrayList<ChordSpan>(filled.size)
-    for (s in filled) {
-        val last = merged.lastOrNull()
-        if (last != null && last.label == s.label) {
-            merged[merged.lastIndex] = last.copy(end = s.end, edited = last.edited || s.edited)
-        } else {
-            merged += s
-        }
-    }
-    return merged
+    return filled
 }
 
 /** Moves the boundary between spans [edge]-1 and [edge] to [time], kept between their outer
- *  edges. A span left with no length disappears. */
+ *  edges. A span left with no length disappears, and if that makes two
+ *  equal-label spans meet they merge. Moving onto the current boundary changes nothing. */
 fun moveEdge(spans: List<ChordSpan>, edge: Int, time: Double, duration: Double): List<ChordSpan> {
     if (edge < 1 || edge >= spans.size) return spans
     val before = spans[edge - 1]
     val after = spans[edge]
     val at = time.coerceIn(before.start, after.end)
+    if (abs(at - before.end) <= EPS) return spans
     val out = spans.toMutableList()
     out[edge - 1] = before.copy(end = at, edited = true)
     out[edge] = after.copy(start = at, edited = true)
-    return normalise(out, duration)
+    val moved = normalise(out, duration)
+    if (moved.size >= spans.size) return moved
+    val k = moved.indices.firstOrNull { it < moved.lastIndex && abs(moved[it].end - at) <= EPS && moved[it].label == moved[it + 1].label }
+    return if (k == null) moved else mergeAt(moved, k)
+}
+
+/** Spans [k] and [k]+1 as one span, marked edited. */
+private fun mergeAt(spans: List<ChordSpan>, k: Int): List<ChordSpan> {
+    val out = spans.toMutableList()
+    out[k] = spans[k].copy(end = spans[k + 1].end, edited = true)
+    out.removeAt(k + 1)
+    return out
 }
 
 /** Moves the start of span [index]; the first span's start stays 0. */
@@ -93,7 +97,7 @@ fun split(spans: List<ChordSpan>, index: Int, time: Double, duration: Double): L
     val out = spans.toMutableList()
     out[index] = s.copy(end = time, edited = true)
     out.add(index + 1, s.copy(start = time, edited = true))
-    return out
+    return normalise(out, duration)
 }
 
 /** Span [index] takes over the next span and keeps its own label; nothing happens for the last. */
@@ -105,12 +109,16 @@ fun mergeWithNext(spans: List<ChordSpan>, index: Int, duration: Double): List<Ch
     return normalise(out, duration)
 }
 
-/** Gives span [index] the Harte label [label] (as it sounds); a neighbour with it merges in. */
+/** Gives span [index] the Harte label [label] (as it sounds); a neighbour on either side with it merges in. */
 fun rename(spans: List<ChordSpan>, index: Int, label: String, duration: Double): List<ChordSpan> {
     if (index !in spans.indices) return spans
     val out = spans.toMutableList()
     out[index] = spans[index].copy(label = label, edited = true)
-    return normalise(out, duration)
+    var result = normalise(out, duration)
+    var i = index.coerceAtMost(result.lastIndex)
+    if (i < result.lastIndex && result[i].label == result[i + 1].label) result = mergeAt(result, i)
+    if (i > 0 && result[i - 1].label == result[i].label) { result = mergeAt(result, i - 1); i-- }
+    return result
 }
 
 /** The nearest of [beats] if within [tolerance] seconds of [time], else [time]. */
