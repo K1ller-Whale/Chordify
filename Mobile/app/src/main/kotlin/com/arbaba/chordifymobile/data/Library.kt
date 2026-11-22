@@ -5,7 +5,10 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.arbaba.chordifymobile.edit.ChordEdits
+import com.arbaba.chordifymobile.edit.EditsLoad
 import com.arbaba.chordifymobile.engine.analysis.AnalysisOptions
+import com.arbaba.chordifymobile.engine.analysis.ChordSpan
 import com.arbaba.chordifymobile.engine.audio.AudioSource
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
 import com.arbaba.chordifymobile.engine.model.parseAnalysisResult
@@ -40,6 +43,7 @@ class Library(
     private val jobs: JobScheduler,
     private val fingerprint: String,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val rebuild: suspend (AnalysisResult, List<ChordSpan>) -> AnalysisResult = { result, _ -> result },
 ) {
     private val resolver: ContentResolver = context.contentResolver
     private val resultsDir = File(context.filesDir, "results")
@@ -110,12 +114,18 @@ class Library(
             }
             out.toString(Charsets.UTF_8.name())
         }
+        importAnalysisText(text, displayNameOf(uri).removeSuffix(".json"))
+    }
+
+    /** Adds the analysis in the export [text] as a completed row; [fallbackName] names it when the
+     *  export has no title or filename. Returns the new row's id. */
+    internal suspend fun importAnalysisText(text: String, fallbackName: String): String = withContext(Dispatchers.IO) {
         val result = parseExport(text)
         val id = newId()
         resultsDir.mkdirs()
         resultFile(id).writeText(result.toJson())
         val key = result.key.global
-        val name = result.source.title ?: result.source.filename ?: displayNameOf(uri).removeSuffix(".json")
+        val name = result.source.title ?: result.source.filename ?: fallbackName
         dao.upsert(Analysis(id, name, fileUri = "", ownsFile = false, sha256 = result.source.sha256.orEmpty(),
                             createdAt = clock(), status = Status.COMPLETED, stage = "done", progress = 1.0,
                             modelFingerprint = IMPORTED, duration = result.source.duration,
@@ -150,6 +160,7 @@ class Library(
         jobs.cancel(id)
         dao.delete(id)
         resultFile(id).delete()
+        editsFile(id).delete()
         peaksFile(id).delete()
         if (row.ownsFile) Uri.parse(row.fileUri).path?.let { File(it).delete() }
     }
@@ -175,6 +186,18 @@ class Library(
     }
 
     fun resultFile(id: String): File = File(resultsDir, "$id.json")
+
+    /** The user's chord edits of the analysis (spec §3.1). */
+    fun editsFile(id: String): File = File(resultsDir, "$id.edits.json")
+
+    /** The song's saved edits: none, the edits, or a file that cannot be read. */
+    suspend fun edits(id: String): EditsLoad = EditsLoad.None // S1
+
+    /** Saves [edits] atomically; throws IOException when it cannot. */
+    suspend fun saveEdits(id: String, edits: ChordEdits) {} // S1
+
+    /** Deletes the song's edits. */
+    suspend fun clearEdits(id: String) {} // S1
 
     /** The waveform of the analysis's file (lib/audio.ts waveformPeaks), made the first time it is
      *  asked for and kept next to the result; null when the file cannot be read. */
