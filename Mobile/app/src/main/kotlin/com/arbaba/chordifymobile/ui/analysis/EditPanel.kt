@@ -18,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -31,7 +32,7 @@ import java.util.Locale
 import kotlin.math.floor
 
 /** m:ss.cc, centiseconds truncated (0:42.10). */
-private fun formatPrecise(seconds: Double): String {
+internal fun formatPrecise(seconds: Double): String {
     val centis = floor(seconds.coerceAtLeast(0.0) * 100 + 1e-6).toLong()
     return String.format(Locale.US, "%d:%02d.%02d", centis / 6000, centis / 100 % 60, centis % 100)
 }
@@ -52,9 +53,9 @@ fun EditPanel(chord: ChordSegment, index: Int, count: Int, notation: Notation, b
     val hasBefore = { t: Double -> beats.isEmpty() || beats.any { it < t - 1e-6 } }
     val hasAfter = { t: Double -> beats.isEmpty() || beats.any { it > t + 1e-6 } }
     // The playhead is read through derivedStateOf so only a change of answer recomposes.
-    val startHereOk by remember(chord, first) { derivedStateOf { !first && time() < chord.end - MIN_SPAN_SECONDS } }
-    val endHereOk by remember(chord, last) { derivedStateOf { !last && time() > chord.start + MIN_SPAN_SECONDS } }
-    val splitOk by remember(chord) {
+    val startHereOk by remember(chord.end, first, time) { derivedStateOf { !first && time() < chord.end - MIN_SPAN_SECONDS } }
+    val endHereOk by remember(chord.start, last, time) { derivedStateOf { !last && time() > chord.start + MIN_SPAN_SECONDS } }
+    val splitOk by remember(chord.start, chord.end, time) {
         derivedStateOf { time().let { it > chord.start + MIN_SPAN_SECONDS && it < chord.end - MIN_SPAN_SECONDS } }
     }
 
@@ -67,9 +68,9 @@ fun EditPanel(chord: ChordSegment, index: Int, count: Int, notation: Notation, b
         Text(formatPrecise(chord.start), Modifier.testTag("editStart"), style = MaterialTheme.typography.titleLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton({ onSetStart(startEarlier) }, Modifier.semantics { contentDescription = "Start one beat earlier" },
-                enabled = !first && hasBefore(chord.start) && startEarlier >= 0.0) { Text("−beat") }
+                enabled = !first && hasBefore(chord.start) && startEarlier >= 0.0) { Text("−beat", Modifier.clearAndSetSemantics {}) }
             OutlinedButton({ onSetStart(startLater) }, Modifier.semantics { contentDescription = "Start one beat later" },
-                enabled = !first && startLater < chord.end - MIN_SPAN_SECONDS && hasAfter(chord.start)) { Text("+beat") }
+                enabled = !first && startLater < chord.end - MIN_SPAN_SECONDS && hasAfter(chord.start)) { Text("+beat", Modifier.clearAndSetSemantics {}) }
         }
         OutlinedButton({ onSetStart(time()) }, enabled = startHereOk) { Text("Set start to here") }
 
@@ -77,9 +78,9 @@ fun EditPanel(chord: ChordSegment, index: Int, count: Int, notation: Notation, b
         Text(formatPrecise(chord.end), Modifier.testTag("editEnd"), style = MaterialTheme.typography.titleLarge)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton({ onSetEnd(endEarlier) }, Modifier.semantics { contentDescription = "End one beat earlier" },
-                enabled = !last && endEarlier > chord.start + MIN_SPAN_SECONDS && hasBefore(chord.end)) { Text("−beat") }
+                enabled = !last && endEarlier > chord.start + MIN_SPAN_SECONDS && hasBefore(chord.end)) { Text("−beat", Modifier.clearAndSetSemantics {}) }
             OutlinedButton({ onSetEnd(endLater) }, Modifier.semantics { contentDescription = "End one beat later" },
-                enabled = !last && hasAfter(chord.end)) { Text("+beat") }
+                enabled = !last && hasAfter(chord.end)) { Text("+beat", Modifier.clearAndSetSemantics {}) }
         }
         OutlinedButton({ onSetEnd(time()) }, enabled = endHereOk) { Text("Set end to here") }
 
