@@ -23,6 +23,7 @@ import com.arbaba.chordifymobile.engine.model.AnalysisResult
 import com.arbaba.chordifymobile.music.Notation
 import com.arbaba.chordifymobile.playback.ExoAudioPlayer
 import com.arbaba.chordifymobile.playback.PlaybackClock
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -34,6 +35,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Whether the analysed audio can be played: still being checked, playable, or gone. */
+/** How close to a looped chord's end counts as its end, in seconds. */
+private const val LOOP_MARGIN = 0.05
+
 enum class AudioFile { CHECKING, PLAYABLE, MISSING }
 
 class AnalysisViewModel(application: Application, private val id: String) : AndroidViewModel(application), EditActions {
@@ -101,6 +105,8 @@ class AnalysisViewModel(application: Application, private val id: String) : Andr
                 _savedShapes.value = load.edits.shapes
                 _hasEdits.value = true
                 return rebuilt
+            } catch (error: CancellationException) {
+                throw error
             } catch (error: Exception) {
                 _editsDamaged.value = true
             }
@@ -134,7 +140,11 @@ class AnalysisViewModel(application: Application, private val id: String) : Andr
             val span = state?.takeIf { it.looping }?.selected?.let { state.spans.getOrNull(it) } ?: return@collectLatest
             val playing = clock ?: return@collectLatest
             playing.time.collect { time ->
-                if (time >= span.end || time < span.start) playing.seek(span.start)
+                if (time >= span.end - LOOP_MARGIN || time < span.start) {
+                    val wasPlaying = playing.playing.value
+                    playing.seek(span.start)
+                    if (wasPlaying || time >= span.end - LOOP_MARGIN) playing.play()
+                }
             }
         }
     }
@@ -161,7 +171,7 @@ class AnalysisViewModel(application: Application, private val id: String) : Andr
         if (playable && duration != null) peaksJob = viewModelScope.launch { peaks.value = library.peaks(row, duration) }
     }
 
-    /** Writes the export and hands the share sheet to [open] (spec 6.2). */
+    /** Writes the export and hands the share sheet to [open] (spec §6.2). */
     fun export(format: ExportFormat, open: (Intent) -> Unit) = viewModelScope.launch {
         val row = analysis.value ?: return@launch
         val analysed = result.value ?: return@launch
@@ -203,6 +213,8 @@ class AnalysisViewModel(application: Application, private val id: String) : Andr
         val next = if (before.isEmpty()) emptyList() else try {
             val engine = container.engine.concurrent()
             withContext(Dispatchers.Default) { engine.nextChords(before, "${key.tonic} ${key.mode}", 6).predictions.map { it.label } }
+        } catch (error: CancellationException) {
+            throw error
         } catch (error: Exception) {
             emptyList()
         }

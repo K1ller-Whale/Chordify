@@ -3,6 +3,7 @@ package com.arbaba.chordifymobile.edit
 import com.arbaba.chordifymobile.engine.analysis.ChordSpan
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
 import com.arbaba.chordifymobile.ui.Fixtures
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,6 +23,9 @@ class EditControllerTest {
     private var failSave: Exception? = null
     private var finished: Pair<ChordEdits?, AnalysisResult?>? = null
 
+    private var rebuildBy: suspend (List<ChordSpan>) -> AnalysisResult = { fakeRebuild(it) }
+    private var saveGate: CompletableDeferred<Unit>? = null
+
     /** The fake rebuild: one chord per span, copying start, end, label and the edited flag. */
     private fun fakeRebuild(spans: List<ChordSpan>): AnalysisResult = original.copy(
         chords = spans.mapIndexed { i, s ->
@@ -33,8 +37,8 @@ class EditControllerTest {
     private fun controller() = EditController(
         duration = duration,
         original = original,
-        rebuild = { fakeRebuild(it) },
-        save = { failSave?.let { error -> throw error }; saved += it },
+        rebuild = { rebuildBy(it) },
+        save = { failSave?.let { error -> throw error }; saveGate?.await(); saved += it },
         clear = { cleared++ },
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
         onFinished = { edits, shown -> finished = edits to shown },
@@ -205,5 +209,72 @@ class EditControllerTest {
         c.start(edits)
         assertEquals("D:maj", c.state.value!!.spans[0].label)
         assertFalse(c.state.value!!.dirty)
+    }
+
+    @Test fun aRebuildThatThrowsOnStartEndsTheSession() {
+        rebuildBy = { throw IllegalStateException("no engine") }
+        val c = started()
+        assertNull(c.state.value)
+        c.rename(1, "E:min")
+        assertNull(c.state.value)
+    }
+
+    @Test fun aRebuildThatThrowsOnAnOpKeepsTheLastStateWithAnError() {
+        val c = started()
+        val before = c.state.value!!
+        rebuildBy = { throw IllegalStateException("boom") }
+        c.rename(1, "E:min")
+        val s = c.state.value!!
+        assertEquals(before.preview, s.preview)
+        assertTrue(s.saveError!!.contains("boom"))
+    }
+
+    @Test fun anOvertakenPreviewIsDropped() {
+        val gates = mutableListOf<CompletableDeferred<Unit>>()
+        rebuildBy = { spans -> CompletableDeferred<Unit>().also { gates += it }.await(); fakeRebuild(spans) }
+        val c = controller()
+        c.start(ChordEdits(chords = spansOf(original)))
+        gates[0].complete(Unit)
+        c.rename(0, "D:maj")
+        c.rename(1, "E:min")
+        gates[2].complete(Unit)
+        assertEquals("E:min", c.state.value!!.preview.chords[1].label)
+        gates[1].complete(Unit)
+        val s = c.state.value!!
+        assertEquals("E:min", s.preview.chords[1].label)
+        assertEquals(s.spans.map { it.label }, s.preview.chords.map { it.label })
+    }
+
+    @Test fun doneAfterAnUnchangedStartOfSavedEditsSaves() {
+        val edits = ChordEdits(chords = spansOf(original).mapIndexed { i, s -> if (i == 0) s.copy(label = "D:maj", edited = true) else s })
+        val c = controller()
+        c.start(edits)
+        c.done()
+        assertEquals(listOf(edits), saved)
+        assertEquals(0, cleared)
+    }
+
+    @Test fun opsWhenNotEditingAreIgnored() {
+        val c = controller()
+        c.rename(0, "E:min"); c.select(1); c.undo(); c.redo(); c.toggleLoop(); c.done(); c.cancel()
+        assertNull(c.state.value)
+        assertTrue(saved.isEmpty())
+        assertEquals(0, cleared)
+    }
+
+    @Test fun theSessionIsLockedWhileItSaves() {
+        val c = started()
+        c.rename(1, "E:min")
+        saveGate = CompletableDeferred()
+        c.done()
+        c.rename(2, "A:maj")
+        c.cancel()
+        c.done()
+        assertEquals("E:min", c.state.value!!.spans[1].label)
+        assertEquals(original.chords[2].label, c.state.value!!.spans[2].label)
+        saveGate!!.complete(Unit)
+        assertNull(c.state.value)
+        assertEquals(1, saved.size)
+        assertEquals(original.chords[2].label, saved[0].chords[2].label)
     }
 }
