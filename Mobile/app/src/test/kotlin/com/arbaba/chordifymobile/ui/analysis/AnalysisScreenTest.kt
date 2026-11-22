@@ -253,7 +253,7 @@ class AnalysisScreenTest {
     }
 
     @Test fun aSaveErrorShows() {
-        showEditing(Recorder(), editState(saveError = "disk full"))
+        showEditing(Recorder(), editState(saveError = SAVE_FAILED + "disk full"))
         rule.onNodeWithTag("saveError").assertIsDisplayed()
         rule.onNodeWithText(SAVE_FAILED + "disk full").assertExists()
     }

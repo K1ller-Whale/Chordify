@@ -94,5 +94,6 @@ object NoEditActions : EditActions {
 
 const val EDITS_UNREADABLE = "Your edits for this song could not be loaded."
 const val SAVE_FAILED = "Could not save your changes: "
+const val UPDATE_FAILED = "Could not update the chords: "
 const val RESTORE_CONFIRM = "Your chords and shapes for this song will be replaced by the model's. This cannot be undone."
 const val DISCARD_CONFIRM = "Discard your changes?"
