@@ -181,26 +181,7 @@ fun analyseMeasured(
     }
 
     val chords = merged.mapIndexedTo(ArrayList()) { i, segment -> chordEntry(i, segment, key, target, beatTimes) }
-    val real = chords.indices.filter { parse(chords[it].label).isChord }
-    var predictability: Double? = null
-    if (options.predictions && real.isNotEmpty()) {
-        val tokens = real.map { token(chords[it].label, key)!! }
-        val observed = ArrayList<Double>()
-        for ((j, at) in real.withIndex()) {
-            val history = real.subList(0, j + 1).map { chords[it].label }
-            val beatsSoFar = if (beatTimes.isNotEmpty()) real.subList(0, j + 1).map { (chords[it].beats ?: 0).toDouble() } else null
-            val (predictions, prior) = predictNext(models.lm, history, key, k = 3, historyBeats = beatsSoFar)
-            var surprise: Double? = null
-            if (j > 0 && tokens[j] != tokens[j - 1]) {
-                val (distribution, _) = models.lm.distribution(tokens.subList(0, j))
-                val p = maxOf(distribution[tokens[j]] ?: 0.0, 1e-6)
-                surprise = pyRound(-log2(p), 3)
-                observed += p
-            }
-            chords[at] = chords[at].copy(next = predictions, theoryOnly = prior, surprise = surprise)
-        }
-        if (observed.isNotEmpty()) predictability = pyRound(observed.average(), 4)
-    }
+    val predictability = if (options.predictions) withPredictions(models, key, chords, beatTimes.isNotEmpty()) else null
 
     var downbeats = DoubleArray(0)
     if (beatTimes.isNotEmpty()) {
@@ -208,10 +189,6 @@ fun analyseMeasured(
         downbeats = beatTimes.filterIndexed { i, _ -> i >= phase && (i - phase) % 4 == 0 }.toDoubleArray()
     }
 
-    val share = LinkedHashMap<String, Double>()
-    for (i in real) share[chords[i].display] = (share[chords[i].display] ?: 0.0) + (chords[i].end - chords[i].start)
-    val total = share.values.sum().takeIf { it != 0.0 } ?: 1.0
-    val romans = real.mapNotNull { chords[it].romanTriad }.filter { it.isNotEmpty() } // loops match bare numerals: V7 counts as V
     val keyInfo = KeyInfo(key.tonicName, key.mode, pyRound(keyConfidence, 4))
     return AnalysisResult(
         analysisId = source.analysisId,
@@ -223,13 +200,7 @@ fun analyseMeasured(
         downbeats = downbeats.map { pyRound(it, 3) },
         bars = if (downbeats.isNotEmpty()) bars(downbeats, duration, chords) else emptyList(),
         chords = chords,
-        summary = Summary(
-            uniqueChords = share.size,
-            timeShare = share.entries.sortedByDescending { it.value }
-                .map { (display, seconds) -> TimeShare(display, pyRound(seconds, 3), pyRound(seconds / total, 4)) },
-            patterns = findPatterns(romans).map { Pattern(it.roman, it.name, it.count) },
-            predictability = predictability,
-        ),
+        summary = summaryOf(chords, predictability),
     )
 }
 
@@ -238,25 +209,81 @@ private class Merged(var start: Double, var end: Double, val label: String, var 
 
 private fun chordEntry(index: Int, segment: Merged, key: Key, target: Vocabulary, beatTimes: DoubleArray): ChordSegment {
     val label = segment.label
+    return chordSegmentFor(
+        index, segment.start, segment.end, label, key, beatTimes,
+        quality = if (parse(label).isChord) target.qualityOf(target.encode(label)!!) else null,
+        confidence = segment.confidence,
+        alternatives = segment.alternatives.filter { it.first != label }
+            .map { (alt, p) -> Alternative(alt, displayName(alt, key.flats), pyRound(p, 4)) },
+    )
+}
+
+/** One chord of the result: the names, the theory and the beat count for [label] over [start]..[end]
+ *  (rounded to 3 places in the entry, as the server does). [beatCount] replaces the count of beats
+ *  inside the span when it is already known. Shared by the analysis and [rebuild]. */
+internal fun chordSegmentFor(
+    index: Int, start: Double, end: Double, label: String, key: Key, beatTimes: DoubleArray,
+    quality: String?, confidence: Double, alternatives: List<Alternative>, edited: Boolean = false,
+    beatCount: Int? = null,
+): ChordSegment {
     val chord = parse(label)
     val described = if (chord.isChord) describe(label, key) else null
     return ChordSegment(
         index = index,
-        start = pyRound(segment.start, 3),
-        end = pyRound(segment.end, 3),
-        beats = if (beatTimes.isEmpty()) null else beatTimes.count { it >= segment.start - 1e-3 && it < segment.end - 1e-3 },
+        start = pyRound(start, 3),
+        end = pyRound(end, 3),
+        beats = if (beatTimes.isEmpty()) null else beatCount ?: beatTimes.count { it >= start - 1e-3 && it < end - 1e-3 },
         label = label,
         display = displayName(label, flats = key.flats),
         root = chord.root?.let { key.spell(it) },
-        quality = if (chord.isChord) target.qualityOf(target.encode(label)!!) else null,
+        quality = quality,
         bass = if (chord.isChord) key.spell(chord.bass!!) else null,
         roman = described?.roman,
         romanTriad = described?.romanTriad,
         function = described?.function,
         scaleHint = described?.scaleHint,
-        confidence = pyRound(segment.confidence, 4),
-        alternatives = segment.alternatives.filter { it.first != label }
-            .map { (alt, p) -> Alternative(alt, displayName(alt, key.flats), pyRound(p, 4)) },
+        confidence = pyRound(confidence, 4),
+        alternatives = alternatives,
+        edited = edited,
+    )
+}
+
+/** The next-chord predictions, theory priors and surprise of every real chord, written into
+ *  [chords] in place. Returns the summary's predictability (null when there are no real chords or no token changes). */
+internal fun withPredictions(models: Models, key: Key, chords: MutableList<ChordSegment>, hasBeats: Boolean): Double? {
+    val real = chords.indices.filter { parse(chords[it].label).isChord }
+    if (real.isEmpty()) return null
+    val tokens = real.map { token(chords[it].label, key)!! }
+    val observed = ArrayList<Double>()
+    for ((j, at) in real.withIndex()) {
+        val history = real.subList(0, j + 1).map { chords[it].label }
+        val beatsSoFar = if (hasBeats) real.subList(0, j + 1).map { (chords[it].beats ?: 0).toDouble() } else null
+        val (predictions, prior) = predictNext(models.lm, history, key, k = 3, historyBeats = beatsSoFar)
+        var surprise: Double? = null
+        if (j > 0 && tokens[j] != tokens[j - 1]) {
+            val (distribution, _) = models.lm.distribution(tokens.subList(0, j))
+            val p = maxOf(distribution[tokens[j]] ?: 0.0, 1e-6)
+            surprise = pyRound(-log2(p), 3)
+            observed += p
+        }
+        chords[at] = chords[at].copy(next = predictions, theoryOnly = prior, surprise = surprise)
+    }
+    return if (observed.isNotEmpty()) pyRound(observed.average(), 4) else null
+}
+
+/** The summary of [chords]: unique chords, time share and patterns, with the given [predictability]. */
+internal fun summaryOf(chords: List<ChordSegment>, predictability: Double?): Summary {
+    val real = chords.indices.filter { parse(chords[it].label).isChord }
+    val share = LinkedHashMap<String, Double>()
+    for (i in real) share[chords[i].display] = (share[chords[i].display] ?: 0.0) + (chords[i].end - chords[i].start)
+    val total = share.values.sum().takeIf { it != 0.0 } ?: 1.0
+    val romans = real.mapNotNull { chords[it].romanTriad }.filter { it.isNotEmpty() } // loops match bare numerals: V7 counts as V
+    return Summary(
+        uniqueChords = share.size,
+        timeShare = share.entries.sortedByDescending { it.value }
+            .map { (display, seconds) -> TimeShare(display, pyRound(seconds, 3), pyRound(seconds / total, 4)) },
+        patterns = findPatterns(romans).map { Pattern(it.roman, it.name, it.count) },
+        predictability = predictability,
     )
 }
 
@@ -269,14 +296,20 @@ internal fun bars(downbeats: DoubleArray, end: Double, chords: List<ChordSegment
         val start = bounds[i]
         val stop = bounds[i + 1]
         if (stop - start < 1e-3) continue
-        val names = ArrayList<String>()
-        for (chord in chords) {
-            val overlap = minOf(stop, chord.end) - maxOf(start, chord.start)
-            if (overlap >= 0.25 * (stop - start) && (names.isEmpty() || names.last() != chord.display)) names += chord.display
-        }
-        out += Bar(pyRound(start, 3), pyRound(stop, 3), names)
+        out += Bar(pyRound(start, 3), pyRound(stop, 3), barChords(start, stop, chords))
     }
     return out
+}
+
+/** The names of the chords sounding in the bar [start]..[stop]: those covering a quarter of it,
+ *  without repeating the one just named. Shared by [bars] and [rebuild]. */
+internal fun barChords(start: Double, stop: Double, chords: List<ChordSegment>): List<String> {
+    val names = ArrayList<String>()
+    for (chord in chords) {
+        val overlap = minOf(stop, chord.end) - maxOf(start, chord.start)
+        if (overlap >= 0.25 * (stop - start) && (names.isEmpty() || names.last() != chord.display)) names += chord.display
+    }
+    return names
 }
 
 /** Python's f"{x:.0%}". */
