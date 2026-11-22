@@ -9,6 +9,7 @@ import com.arbaba.chordifymobile.engine.vocab.displayName
 import com.arbaba.chordifymobile.engine.vocab.parse
 import com.arbaba.chordifymobile.music.Shape
 import com.arbaba.chordifymobile.music.guitarShape
+import java.util.Locale
 
 // Quick chord (spec §6.2, chordify-frontend/src/pages/QuickChord.tsx): one chord from a short
 // clip, named in full (Am7, not the web's v1 A), with its confidence and guitar shape.
@@ -18,6 +19,10 @@ val CLIP_LIMITS = AudioLimits(minSeconds = 0.5, maxSeconds = 30.0)
 
 /** A recording stops by itself after this long. */
 const val RECORD_SECONDS = 3.0
+
+/** "1.2 of 3 s": how long the recording has run, and when it stops by itself. */
+fun recordingTime(seconds: Double): String =
+    String.format(Locale.ROOT, "%.1f of %s s", seconds, RECORD_SECONDS.toString().removeSuffix(".0"))
 
 /** Keeps every sample it is given. */
 class CollectingSink : SampleSink {

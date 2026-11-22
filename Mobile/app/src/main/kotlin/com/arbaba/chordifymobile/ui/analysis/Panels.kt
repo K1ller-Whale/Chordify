@@ -62,8 +62,8 @@ import kotlin.math.max
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-// The panels below the timeline (Panels.tsx): the lead sheet, the circle of fifths, and the time
-// per chord with the repeating progressions.
+// Three of the analysis screen's panel tabs (Panels.tsx): the lead sheet (Sheet), the circle of
+// fifths (Circle), and the time per chord with the repeating progressions (Stats).
 
 /** Four bars a row; the current bar is marked and kept in view, and a tap jumps to a bar. Fills [modifier]. */
 @Composable

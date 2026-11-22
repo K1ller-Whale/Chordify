@@ -23,7 +23,12 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:windowSoftInputMode="adjustResize">
+            android:screenOrientation="sensorLandscape"
+            android:windowSoftInputMode="adjustResize"
+            tools:ignore="DiscouragedApi">
+            <!-- sensorLandscape: the Screen setting's default, for a first start. MainActivity applies
+                 the setting itself before its window exists, so no launch relaunches. The setting
+                 (Landscape, Portrait, Follow the phone) is the user's choice, hence the ignore. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

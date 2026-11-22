@@ -36,7 +36,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -67,7 +66,8 @@ import com.arbaba.chordifymobile.playback.PlaybackClock
 import com.arbaba.chordifymobile.ui.AdaptiveLayout
 import com.arbaba.chordifymobile.ui.stageLabel
 
-/** The analysis screen (spec §6.2), opened from the Library. */
+/** The analysis screen (M7 spec §3), opened from the Library: the analysing, failed and cancelled
+ *  states, or the completed analysis ([AnalysisContent]). */
 @Composable
 fun AnalysisScreen(id: String, onBack: () -> Unit = {}) {
     val application = LocalContext.current.applicationContext as Application
@@ -153,8 +153,9 @@ fun AnalysisContent(
 ) {
     val result = remember(analysed, capo) { withCapo(analysed, capo) }
     val suggestion = remember(analysed) { suggestCapo(analysed.chords) }
-    // The time is read by small scopes only (the countdown, the progress bar, the time text), so
-    // the rest of the screen recomposes when the chord changes, not every frame (spec §6.3).
+    // The time is read by small scopes only (the Chord panel's countdown, the strip, the seek bar
+    // and the time text), so the rest of the screen recomposes when the chord changes, not every
+    // frame (spec §6.3).
     val time: State<Double> = clock.time.collectAsState()
     val playing by clock.playing.collectAsState()
     val rate by clock.rate.collectAsState()
@@ -195,20 +196,21 @@ fun AnalysisContent(
         true
     }
 
-    // The stage with the banner over its top, then the chord strip.
+    // The no-audio banner (when there is one) above the stage, so it hides none of it; then the chord strip.
     val stageColumn: @Composable ColumnScope.() -> Unit = {
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            Stage(chord, notation, capo, sounding, onSwipe = { clock.seek(chordStep(starts, clock.time.value, it)) },
-                  modifier = Modifier.fillMaxSize())
-            NoAudioBanner(audio, mismatch, onPickFile, Modifier.align(Alignment.TopCenter).padding(8.dp))
-        }
+        NoAudioBanner(audio, mismatch, onPickFile, Modifier.padding(start = 8.dp, top = 8.dp, end = 8.dp))
+        Stage(chord, notation, capo, sounding, onSwipe = { clock.seek(chordStep(starts, clock.time.value, it)) },
+              modifier = Modifier.weight(1f).fillMaxWidth())
         ChordStrip(result, time, index, notation, peaks, surprising, onSeek = { clock.seek(it) })
     }
-    // The tab row over the selected panel.
+    // The tab row over the selected panel. Compact tabs (labelLarge, 4 dp padding instead of
+    // Material's 16 dp) so that all five labels fit in the 40% of a landscape phone.
     val panelColumn: @Composable ColumnScope.() -> Unit = {
         PrimaryTabRow(selectedTabIndex = tab.ordinal) {
             for (entry in PanelTab.entries) {
-                Tab(selected = tab == entry, onClick = { tab = entry }, text = { Text(entry.label, maxLines = 1) })
+                Tab(selected = tab == entry, onClick = { tab = entry }, modifier = Modifier.height(48.dp).testTag("tab-${entry.name}")) {
+                    Text(entry.label, Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.labelLarge, maxLines = 1)
+                }
             }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {

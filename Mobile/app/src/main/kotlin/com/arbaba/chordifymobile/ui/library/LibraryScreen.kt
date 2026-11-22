@@ -268,7 +268,7 @@ private fun RecordingBar(seconds: Double, onStop: () -> Unit, modifier: Modifier
         Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(10.dp).clip(CircleShape).background(MaterialTheme.colorScheme.error))
             Spacer(Modifier.width(8.dp))
-            Text("Recording ${formatTime(seconds)}", Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+            Text("Recording ${formatTime(seconds)}") // not a live region: it would be read out every second
             Spacer(Modifier.width(12.dp))
             Button(onClick = onStop) { Text("Stop and analyse") }
         }

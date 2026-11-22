@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -47,8 +48,9 @@ import kotlin.math.max
 fun TransportBar(result: AnalysisResult, time: State<Double>, playing: Boolean, rate: Double,
                  visibleSeconds: Double, onToggle: () -> Unit, onSeek: (Double) -> Unit,
                  onRate: (Double) -> Unit, modifier: Modifier = Modifier) {
+    // 8 dp between the parts, so that the seek bar keeps 120 dp on a 360 dp-wide phone held upright.
     Row(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilledIconButton(onClick = onToggle, modifier = Modifier.testTag("play").semantics { contentDescription = if (playing) "Pause" else "Play" }) {
             // text glyphs: the core icon set has no pause icon
             Text(if (playing) "❚❚" else "▶", modifier = Modifier.clearAndSetSemantics {})
@@ -72,7 +74,7 @@ private fun SeekBar(result: AnalysisResult, time: State<Double>, visibleSeconds:
     val ink = MaterialTheme.colorScheme.onSurface
     val ink2 = MaterialTheme.colorScheme.onSurfaceVariant
     val duration = result.source.duration
-    Canvas(modifier.height(24.dp).testTag("seekBar")
+    Canvas(modifier.height(24.dp).clipToBounds().testTag("seekBar")
                .semantics { contentDescription = "The whole song: tap or drag to jump" }
                .pointerInput(duration) { detectTapGestures { onSeek(overviewSeek(it.x, size.width.toFloat(), duration)) } }
                .pointerInput(duration) {

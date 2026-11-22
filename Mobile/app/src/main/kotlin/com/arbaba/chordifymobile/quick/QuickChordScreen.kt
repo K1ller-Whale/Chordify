@@ -132,7 +132,7 @@ class QuickChordViewModel(application: Application) : AndroidViewModel(applicati
     }
 }
 
-/** The Quick chord tab (spec §6.2). */
+/** The Quick chord screen (M7 spec §4.3), opened from the Library. */
 @Composable
 fun QuickChordScreen(onBack: () -> Unit = {}, model: QuickChordViewModel = viewModel()) {
     val context = LocalContext.current
@@ -191,7 +191,7 @@ fun QuickChordContent(state: QuickState, result: QuickResult?, error: String?, o
                     if (state is QuickState.Recording) {
                         LinearProgressIndicator(progress = { min(1f, state.level * 4) },
                                                 modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Input level" })
-                        Text(String.format(java.util.Locale.ROOT, "%.1f s", state.seconds), style = MaterialTheme.typography.bodySmall)
+                        Text(recordingTime(state.seconds), style = MaterialTheme.typography.bodySmall)
                     }
                     OutlinedButton(onClick = onPick, enabled = state == QuickState.Idle) { Text("Or pick a short clip") }
                     if (error != null) {

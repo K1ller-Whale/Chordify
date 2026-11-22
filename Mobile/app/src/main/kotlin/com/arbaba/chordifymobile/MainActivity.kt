@@ -29,17 +29,24 @@ import com.arbaba.chordifymobile.ui.analysis.AnalysisScreen
 import com.arbaba.chordifymobile.ui.settings.AboutScreen
 import com.arbaba.chordifymobile.ui.settings.SettingsScreen
 import com.arbaba.chordifymobile.ui.library.LibraryScreen
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        val container = (application as ChordifyApp).container
+        // The Screen setting is applied before the window exists, so that a launch with the phone
+        // upright does not relaunch into landscape (the manifest's sensorLandscape is the default
+        // for a first start). One small DataStore read per creation.
+        requestedOrientation = runBlocking { container.settings.screenOrientation.first() }.activityOrientation
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val container = (application as ChordifyApp).container
-        lifecycleScope.launch {
+        lifecycleScope.launch { // later changes of the setting
             repeatOnLifecycle(Lifecycle.State.CREATED) {
-                container.settings.screenOrientation.collect { requestedOrientation = it.activityOrientation }
+                container.settings.screenOrientation.distinctUntilChanged().collect { requestedOrientation = it.activityOrientation }
             }
         }
         setContent { ChordifyTheme { ChordifyNavigation() } }
@@ -52,20 +59,25 @@ class MainActivity : ComponentActivity() {
     }
 
     /** "Share to" (ACTION_SEND) and "Open with" (ACTION_VIEW): an audio file is analysed, a .json
-     *  export is added as it is. */
+     *  export is added as it is. The import runs in the app's scope, not the activity's, so that a
+     *  relaunch (a rotation, a change of the Screen setting) cannot cancel it half-way. */
     private fun importShared(intent: Intent) {
         val uri = sharedFile(intent) ?: return
-        val container = (application as ChordifyApp).container
-        lifecycleScope.launch {
+        val app = application as ChordifyApp
+        val container = app.container
+        val type = intent.type ?: contentResolver.getType(uri)
+        container.scope.launch {
             try {
-                if (isAnalysisExport(intent.type ?: contentResolver.getType(uri), uri.lastPathSegment)) {
+                if (isAnalysisExport(type, uri.lastPathSegment)) {
                     container.library.importAnalysis(uri)
-                    Toast.makeText(this@MainActivity, "The analysis is in the Library.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(app, "The analysis is in the Library.", Toast.LENGTH_SHORT).show()
                 } else {
                     container.library.import(uri, Settings.options(container.settings.majorMinorOnly.first()))
                 }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
             } catch (error: Exception) {
-                Toast.makeText(this@MainActivity, "Could not read this file: ${error.message}", Toast.LENGTH_LONG).show()
+                Toast.makeText(app, "Could not read this file: ${error.message}", Toast.LENGTH_LONG).show()
             }
         }
     }

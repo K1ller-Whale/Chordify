@@ -24,10 +24,6 @@ fun countdown(chord: ChordSegment, beats: List<Double>, time: Double): String {
     return "$beatsLeft beat${if (beatsLeft == 1) "" else "s"} until the change (${String.format(Locale.ROOT, "%.1f", left)} s)"
 }
 
-/** How far into the chord the playhead is, 0..1. */
-fun elapsed(chord: ChordSegment, time: Double): Float =
-    (1 - maxOf(0.0, chord.end - time) / maxOf(1e-6, chord.end - chord.start)).toFloat().coerceIn(0f, 1f)
-
 /** "Tonic in C major", or null when the chord has no function. */
 fun functionLine(chord: ChordSegment, result: AnalysisResult): String? {
     val name = FUNCTION_NAMES[chord.function] ?: return null

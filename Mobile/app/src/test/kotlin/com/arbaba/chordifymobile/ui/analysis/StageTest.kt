@@ -1,17 +1,31 @@
 package com.arbaba.chordifymobile.ui.analysis
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.assertTouchHeightIsEqualTo
+import androidx.compose.ui.test.assertTouchWidthIsEqualTo
+import androidx.compose.ui.test.assertWidthIsEqualTo
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.arbaba.chordifymobile.engine.model.Alternative
 import com.arbaba.chordifymobile.engine.model.ChordSegment
@@ -23,6 +37,7 @@ import com.arbaba.chordifymobile.ui.assertAnnounced
 import com.arbaba.chordifymobile.ui.assertEveryControlNamed
 import com.arbaba.chordifymobile.ui.show
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -78,6 +93,50 @@ class StageTest {
     @Test fun unsureLandscape() = unsureBadge(LANDSCAPE)
     @Test fun unsurePortrait() = unsureBadge(PORTRAIT)
 
+    @Test fun theBadgeIsA48DpTouchTarget() {
+        rule.show { Box(Modifier.fillMaxSize()) { Stage(unsureChord, Notation.LETTERS, 0, null, {}) } }
+        rule.onNodeWithTag("unsure").assertWidthIsEqualTo(48.dp).assertHeightIsEqualTo(48.dp)
+            .assertTouchWidthIsEqualTo(48.dp).assertTouchHeightIsEqualTo(48.dp)
+    }
+
+    @Test fun theNameHasRoomForItsGlyphsAndTheBadgeSitsOnIt() {
+        rule.show { Box(Modifier.fillMaxSize()) { Stage(unsureChord, Notation.LETTERS, 0, null, {}) } }
+        val name = rule.onNodeWithTag("nowName", useUnmergedTree = true)
+        val layouts = mutableListOf<TextLayoutResult>()
+        name.fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!(layouts)
+        val layout = layouts.single()
+        val glyphs = with(layout.layoutInput.density) { layout.layoutInput.style.fontSize.toPx() }
+        assertTrue("the name's line (${layout.size.height} px) is shorter than its font ($glyphs px)", layout.size.height >= glyphs)
+        // the badge is centred on the name, not pushed down by a fixed offset
+        val nameBox = name.getUnclippedBoundsInRoot()
+        val badge = rule.onNodeWithTag("unsure").getUnclippedBoundsInRoot()
+        assertEquals(((nameBox.top + nameBox.bottom) / 2).value, ((badge.top + badge.bottom) / 2).value, 1f)
+    }
+
+    /** A phone held sideways with the no-audio banner above the stage leaves it about 100 dp; every
+     *  line keeps its full height (none is squeezed or cut) and stays inside the stage. */
+    private fun shortStage(height: Int) {
+        rule.show { Box(Modifier.fillMaxSize()) { Stage(unsureChord, Notation.LETTERS, 5, "C", {}, Modifier.size(480.dp, height.dp)) } }
+        rule.onNodeWithTag("unsure").performClick()
+        // Bounds as drawn, with the stage's scaling (the semantics bounds keep the unscaled size).
+        fun drawn(node: SemanticsNode) = node.layoutInfo.coordinates.boundsInRoot()
+        val stage = drawn(rule.onNodeWithTag("stage").fetchSemanticsNode())
+        val parts = listOf("nowName", "theoryLine", "soundsAs", "unsureText").map { tag ->
+            val node = rule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
+            val layouts = mutableListOf<TextLayoutResult>()
+            node.config[SemanticsActions.GetTextLayoutResult].action!!(layouts)
+            assertFalse("$tag is cut at a $height dp stage", layouts.single().didOverflowHeight)
+            tag to drawn(node)
+        } + ("diagram" to drawn(diagrams().fetchSemanticsNodes().single()))
+        for ((part, bounds) in parts) {
+            assertTrue("$part $bounds must be inside the $height dp stage $stage",
+                       bounds.top >= stage.top - 0.5f && bounds.bottom <= stage.bottom + 0.5f)
+        }
+    }
+
+    @Test fun aShortStageShowsEveryLine() = shortStage(104)
+    @Test fun aVeryShortStageShowsEveryLineSmaller() = shortStage(80)
+
     @Test fun sureChordHasNoBadge() {
         rule.show { Stage(c.copy(confidence = 0.9, alternatives = unsureChord.alternatives), Notation.LETTERS, 0, null, {}) }
         rule.onAllNodes(SemanticsMatcher("unsure") { it.config.getOrNull(SemanticsProperties.TestTag) == "unsure" }).assertCountEquals(0)
@@ -113,6 +172,7 @@ class StageTest {
         val spoken = live[0].config.getOrNull(SemanticsProperties.Text).orEmpty().joinToString(" ") { it.text }
         assertTrue(spoken, "C" in spoken && "I \u00b7 Tonic" in spoken && "Capo 5 \u00b7 sounds as C" in spoken)
         assertTrue(spoken, "Unsure" !in spoken && "Guitar" !in spoken)
-        assertTrue(live[0].config.getOrNull(SemanticsProperties.ContentDescription).orEmpty().none { it.startsWith("Guitar") })
+        assertTrue(live[0].config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+                       .none { it.startsWith("Guitar") || it.startsWith("Show other") })
     }
 }
