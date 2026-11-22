@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +60,7 @@ import com.arbaba.chordifymobile.music.chordName
 import com.arbaba.chordifymobile.music.functionHue
 import com.arbaba.chordifymobile.music.isNoChord
 import com.arbaba.chordifymobile.ui.LocalChordifyColors
+import kotlinx.coroutines.delay
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -79,6 +81,12 @@ fun stripName(chord: ChordSegment, notation: Notation): String =
 /** An edge being dragged: edge k is the boundary between chords k-1 and k. The finger is at [x] (px, in the strip)
  *  and grabbed the edge [grab] seconds away from the point under it, so the edge follows the finger as the strip moves. */
 private class EdgeDrag(val edge: Int, val x: Float, val grab: Double)
+
+/** A finished drag, drawn where it was released until the rebuilt [result] arrives (it is not the one that was shown). */
+private class HeldEdge(val edge: Int, val time: Double, val result: AnalysisResult)
+
+/** How long a released edge is held at most, if the rebuilt result never comes (a failed rebuild, or a move that changed nothing). */
+private const val HOLD_MILLIS = 600L
 
 /** The chords coming up, sliding toward a fixed playhead (the timeline's detail track, 72 dp tall). */
 @Composable
@@ -104,6 +112,8 @@ fun ChordStrip(result: AnalysisResult, time: State<Double>, current: Int, notati
     val onSelectNow by rememberUpdatedState(onSelect)
     val onMoveEdgeNow by rememberUpdatedState(onMoveEdge)
     var drag by remember { mutableStateOf<EdgeDrag?>(null) }
+    var held by remember { mutableStateOf<HeldEdge?>(null) }
+    LaunchedEffect(held) { if (held != null) { delay(HOLD_MILLIS); held = null } }
     val stripHeight = if (editing) EDIT_HEIGHT else HEIGHT
     val ribH = if (editing) EDIT_RIB_H else RIB_H
     val waveY = stripHeight - 2 - WAVE_H
@@ -160,7 +170,9 @@ fun ChordStrip(result: AnalysisResult, time: State<Double>, current: Int, notati
                                                }
                                                val done = drag
                                                if (finished && handle != null && done != null) {
-                                                   onMoveEdgeNow(done.edge, edgeTime(done, size.width.toFloat()))
+                                                   val at = edgeTime(done, size.width.toFloat())
+                                                   held = HeldEdge(done.edge, at, resultNow)
+                                                   onMoveEdgeNow(done.edge, at)
                                                }
                                            } finally {
                                                drag = null
@@ -212,9 +224,11 @@ fun ChordStrip(result: AnalysisResult, time: State<Double>, current: Int, notati
                 val color = colors.of(functionHue(chord.function))
                 val active = i == current
                 val d = drag
-                val dragged = d?.let { edgeTime(it, width) }
-                val start = if (d != null && d.edge == i) dragged!! else chord.start
-                val end = if (d != null && d.edge == i + 1) dragged!! else chord.end
+                val h = held?.takeIf { it.result === result }
+                val movedEdge = d?.edge ?: h?.edge
+                val movedTo = d?.let { edgeTime(it, width) } ?: h?.time
+                val start = if (movedEdge == i) movedTo!! else chord.start
+                val end = if (movedEdge == i + 1) movedTo!! else chord.end
                 val x = start.toFloat() * pps + u
                 val w = max(2 * u, (end - start).toFloat() * pps - 2 * u)
                 val alpha = if (chord.confidence < 0.35 && !none) 0.6f else 1f
