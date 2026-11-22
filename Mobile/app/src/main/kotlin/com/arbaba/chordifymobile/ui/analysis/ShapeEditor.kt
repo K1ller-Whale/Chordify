@@ -23,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -40,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.arbaba.chordifymobile.edit.missingNote
+import com.arbaba.chordifymobile.edit.stopStrum
 import com.arbaba.chordifymobile.edit.strum
 import com.arbaba.chordifymobile.engine.vocab.displayName
 
@@ -65,6 +67,7 @@ internal fun ShapeEditorContent(label: String, shape: List<Int>?, defaultShape: 
                                 onStrum: (List<Int>, Int) -> Unit = ::strum) {
     var frets by remember { mutableStateOf(shape ?: defaultShape ?: List(6) { -1 }) }
     var start by remember { mutableIntStateOf((frets.filter { it > 0 }.minOrNull() ?: 1).coerceIn(1, MAX_START)) }
+    DisposableEffect(Unit) { onDispose { stopStrum() } }
     val warning = missingNote(frets, label)
     fun set(string: Int, fret: Int) { frets = frets.toMutableList().also { it[string] = fret } }
 

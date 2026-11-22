@@ -17,6 +17,12 @@ class ShapeCheckTest {
     @Test fun seventhIsChecked() =
         assertEquals("This shape has no F, the 7th of G7", missingNote(listOf(3, 2, 0, 0, 0, 3), "G:7"))
 
+    @Test fun thirdAndFifthMissingNamesTheThird() =
+        assertEquals("This shape has no B, the 3rd of G", missingNote(listOf(-1, -1, 0, 0, -1, -1), "G:maj"))
+
+    @Test fun fifthAndSeventhMissingNamesTheFifth() =
+        assertEquals("This shape has no D, the 5th of G7", missingNote(listOf(3, -1, -1, 0, 0, -1), "G:7"))
+
     @Test fun noChordIsNeverFlagged() = assertNull(missingNote(listOf(-1, -1, -1, -1, -1, -1), "N"))
 
     @Test fun openEShapeFrequenciesAndCapo() {

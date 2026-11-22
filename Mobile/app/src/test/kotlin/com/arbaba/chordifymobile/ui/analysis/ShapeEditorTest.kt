@@ -102,6 +102,14 @@ class ShapeEditorTest {
         rule.assertEveryControlNamed()
     }
 
+    @Test fun strumItPassesTheCurrentFretsAndCapo() {
+        val calls = mutableListOf<Pair<List<Int>, Int>>()
+        rule.show { ShapeEditorContent("G:maj", open, open, 2, onSave = {}, onCancel = {}, onStrum = { f, c -> calls += f to c }) }
+        rule.onNodeWithContentDescription("String E, fret 3").performClick()
+        rule.onNodeWithText("Strum it").performClick()
+        assertEquals(listOf(listOf(0, 2, 0, 0, 0, 3) to 2), calls)
+    }
+
     @Test fun cancelCalls() {
         var cancelled = 0
         rule.show { ShapeEditor("G:maj", open, open, 0, onSave = {}, onCancel = { cancelled++ }) }

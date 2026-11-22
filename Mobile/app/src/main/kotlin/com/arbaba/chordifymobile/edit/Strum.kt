@@ -3,6 +3,7 @@ package com.arbaba.chordifymobile.edit
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
+import android.util.Log
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.math.roundToInt
@@ -39,28 +40,81 @@ fun pluck(frequencies: List<Double>, sampleRate: Int = 44100, seconds: Double = 
     return ShortArray(total) { (mix[it] * scale).roundToInt().toShort() }
 }
 
-/** Plays [shape] as a strum through a static AudioTrack, on a background thread. */
+private const val SAMPLE_RATE = 44100
+private const val TAG = "Strum"
+
+/** The one strum that may be playing: its track and the thread that owns and releases it. */
+private object Playing {
+    private var thread: Thread? = null
+    private var track: AudioTrack? = null
+
+    @Synchronized fun stopCurrent() {
+        thread?.interrupt()
+        track?.let { releaseQuietly(it) }
+        thread = null
+        track = null
+    }
+
+    @Synchronized fun begin(owner: Thread) { stopCurrent(); thread = owner }
+
+    @Synchronized fun attach(owner: Thread, created: AudioTrack): Boolean {
+        if (thread !== owner) return false
+        track = created
+        return true
+    }
+
+    @Synchronized fun finish(owner: Thread, created: AudioTrack?) {
+        created?.let { releaseQuietly(it) }
+        if (thread === owner) { thread = null; track = null }
+    }
+}
+
+private fun releaseQuietly(track: AudioTrack) {
+    try { track.stop() } catch (_: IllegalStateException) {}
+    try { track.release() } catch (_: IllegalStateException) {}
+}
+
+/** Stops the strum that is playing, if any (call when the editor closes). */
+fun stopStrum() = Playing.stopCurrent()
+
+/** Plays [shape] as a strum through a static AudioTrack, on a background thread. A new strum
+ *  stops the one before it; the track is always released, even when playback fails. */
 fun strum(shape: List<Int>, capo: Int) {
-    val pcm = pluck(strumFrequencies(shape, capo))
-    Thread {
+    val frequencies = strumFrequencies(shape, capo)
+    if (frequencies.isEmpty()) return
+    val owner = Thread {
+        var track: AudioTrack? = null
         try {
-            val track = AudioTrack.Builder()
+            val pcm = pluck(frequencies, SAMPLE_RATE)
+            val built = AudioTrack.Builder()
                 .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
                     .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
                 .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                    .setSampleRate(44100).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
+                    .setSampleRate(SAMPLE_RATE).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
                 .setBufferSizeInBytes(pcm.size * 2)
                 .setTransferMode(AudioTrack.MODE_STATIC)
                 .build()
-            track.write(pcm, 0, pcm.size)
-            track.setNotificationMarkerPosition(pcm.size)
-            track.setPlaybackPositionUpdateListener(object : AudioTrack.OnPlaybackPositionUpdateListener {
-                override fun onMarkerReached(t: AudioTrack) { t.release() }
-                override fun onPeriodicNotification(t: AudioTrack) {}
-            })
-            track.play()
-        } catch (_: Exception) {
-            // No audio output: the strum is a nicety, so stay silent.
+            track = built
+            if (!Playing.attach(Thread.currentThread(), built)) return@Thread
+            val written = built.write(pcm, 0, pcm.size)
+            if (written != pcm.size) {
+                Log.w(TAG, "AudioTrack.write returned $written of ${pcm.size}")
+                return@Thread
+            }
+            built.play()
+            Thread.sleep(pcm.size * 1000L / SAMPLE_RATE + 100)
+        } catch (_: InterruptedException) {
+            // Superseded by a newer strum, or the editor closed.
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "Could not play the strum", e)
+        } catch (e: UnsupportedOperationException) {
+            Log.w(TAG, "Could not play the strum", e)
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Could not play the strum", e)
+        } finally {
+            Playing.finish(Thread.currentThread(), track)
         }
-    }.start()
+    }
+    Playing.begin(owner)
+    owner.start()
 }
