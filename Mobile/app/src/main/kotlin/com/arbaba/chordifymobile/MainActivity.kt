@@ -24,6 +24,7 @@ import com.arbaba.chordifymobile.data.Settings
 import com.arbaba.chordifymobile.data.isAnalysisExport
 import com.arbaba.chordifymobile.quick.QuickChordScreen
 import com.arbaba.chordifymobile.songwriter.SongwriterScreen
+import com.arbaba.chordifymobile.ui.AppBackground
 import com.arbaba.chordifymobile.ui.ChordifyTheme
 import com.arbaba.chordifymobile.ui.analysis.AnalysisScreen
 import com.arbaba.chordifymobile.ui.settings.AboutScreen
@@ -38,9 +39,10 @@ import kotlinx.coroutines.runBlocking
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         val container = (application as ChordifyApp).container
-        // The Screen setting is applied before the window exists, so that a launch with the phone
-        // upright does not relaunch into landscape (the manifest's sensorLandscape is the default
-        // for a first start). One small DataStore read per creation.
+        // The Screen setting is applied before the window exists (the manifest's sensorLandscape is
+        // the default for a first start). One small DataStore read per creation. The activity
+        // handles orientation and size changes itself (manifest configChanges), so turning to the
+        // setting's orientation re-lays the UI out instead of relaunching the activity.
         requestedOrientation = runBlocking { container.settings.screenOrientation.first() }.activityOrientation
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -49,7 +51,7 @@ class MainActivity : ComponentActivity() {
                 container.settings.screenOrientation.distinctUntilChanged().collect { requestedOrientation = it.activityOrientation }
             }
         }
-        setContent { ChordifyTheme { ChordifyNavigation() } }
+        setContent { ChordifyTheme { AppBackground { ChordifyNavigation() } } }
         if (savedInstanceState == null) importShared(intent)
     }
 

@@ -22,6 +22,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,6 +31,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+
+/** The app's background: fills the window with the theme's background colour and gives every text
+ *  and icon inside that sets no colour of its own the matching content colour (light in the dark
+ *  theme). The Scaffold of the old bottom bar used to do this. */
+@Composable
+fun AppBackground(content: @Composable () -> Unit) {
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
+}
 
 /** A section heading: the text upper-cased, labelMedium, LocalChordifyColors.current.muted. */
 @Composable
@@ -44,7 +53,7 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun ScreenTopBar(title: String, onBack: (() -> Unit)? = null, modifier: Modifier = Modifier,
                  actions: @Composable RowScope.() -> Unit = {}) {
-    Column(modifier.fillMaxWidth().testTag("topBar").background(MaterialTheme.colorScheme.surface)) {
+    Surface(modifier.fillMaxWidth().testTag("topBar"), color = MaterialTheme.colorScheme.surface) { Column {
         Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
             if (onBack != null) {
                 IconButton(onClick = onBack, modifier = Modifier.testTag("back")) {
@@ -58,7 +67,7 @@ fun ScreenTopBar(title: String, onBack: (() -> Unit)? = null, modifier: Modifier
             actions()
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-    }
+    } }
 }
 
 /** Gives [content] whether the space it fills is wider than tall (BoxWithConstraints:

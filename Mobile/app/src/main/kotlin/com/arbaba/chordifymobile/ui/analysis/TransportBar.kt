@@ -9,10 +9,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -52,8 +55,10 @@ fun TransportBar(result: AnalysisResult, time: State<Double>, playing: Boolean, 
     Row(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilledIconButton(onClick = onToggle, modifier = Modifier.testTag("play").semantics { contentDescription = if (playing) "Pause" else "Play" }) {
-            // text glyphs: the core icon set has no pause icon
-            Text(if (playing) "❚❚" else "▶", modifier = Modifier.clearAndSetSemantics {})
+            // The core icon set has a play icon but no pause icon, so pause is a text glyph. A "▶"
+            // glyph would be drawn as a coloured emoji on Samsung phones.
+            if (playing) Text("❚❚", modifier = Modifier.clearAndSetSemantics {})
+            else Icon(Icons.Filled.PlayArrow, contentDescription = null)
         }
         TimeText(time, result.source.duration)
         SeekBar(result, time, visibleSeconds, onSeek, Modifier.weight(1f))
