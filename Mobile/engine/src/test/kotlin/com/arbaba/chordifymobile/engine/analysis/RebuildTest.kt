@@ -13,7 +13,6 @@ import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -77,8 +76,8 @@ class RebuildTest {
         val spans = spans(result).toMutableList()
         spans[0] = spans[0].copy(label = "C:maj(9)", edited = true)
         val chord = rebuild(result, spans, JVM_MODELS).chords[0]
-        assertNotNull(chord.roman)
-        assertNotNull(chord.quality)
+        assertEquals("I", chord.roman)
+        assertEquals("maj", chord.quality)
     }
 
     @Test
@@ -102,5 +101,34 @@ class RebuildTest {
         assertEquals(spans.size, rebuilt.chords.size)
         assertEquals(spans.indices.toList(), rebuilt.chords.map { it.index })
         assertEquals(spans.map { it.label }, rebuilt.chords.map { it.label })
+    }
+
+    @Test
+    fun renamingAChordKeepsItsBeatCountBecauseTheTimesDidNotMove() {
+        val pulse = analysed.single { it.str("file") == "pulse.wav" }
+        val result = analyseMeasured(JVM_MODELS, pulse.measurements(), AnalysisOptions(), pulse.sourceInfo(analysisId))
+        val spans = spans(result).toMutableList()
+        assertEquals(9, result.chords[3].beats) // a recount from the rounded beats gives 8
+        spans[3] = spans[3].copy(label = "A:min", edited = true)
+        assertEquals(9, rebuild(result, spans, JVM_MODELS).chords[3].beats)
+    }
+
+    @Test
+    fun anUneditedSpanWithAnotherLabelIsNotTheModelsChord() {
+        val result = analyse()
+        val spans = spans(result).toMutableList()
+        spans[1] = spans[1].copy(label = "E:min")
+        val chord = rebuild(result, spans, JVM_MODELS).chords[1]
+        assertEquals(1.0, chord.confidence, 0.0)
+        assertTrue(chord.alternatives.isEmpty())
+        assertEquals("min", chord.quality)
+        assertFalse(chord.edited)
+    }
+
+    @Test
+    fun barsKeepTheirStoredBounds() {
+        val result = analyse()
+        val rebuilt = rebuild(result, spans(result), JVM_MODELS)
+        assertEquals(result.bars.map { it.start to it.end }, rebuilt.bars.map { it.start to it.end })
     }
 }

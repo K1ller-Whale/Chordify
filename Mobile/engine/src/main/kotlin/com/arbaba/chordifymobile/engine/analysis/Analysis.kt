@@ -249,7 +249,7 @@ internal fun chordSegmentFor(
 }
 
 /** The next-chord predictions, theory priors and surprise of every real chord, written into
- *  [chords] in place. Returns the summary's predictability (null when nothing changed key-wise). */
+ *  [chords] in place. Returns the summary's predictability (null when there are no real chords or no token changes). */
 internal fun withPredictions(models: Models, key: Key, chords: MutableList<ChordSegment>, hasBeats: Boolean): Double? {
     val real = chords.indices.filter { parse(chords[it].label).isChord }
     if (real.isEmpty()) return null
@@ -287,24 +287,29 @@ internal fun summaryOf(chords: List<ChordSegment>, predictability: Double?): Sum
     )
 }
 
-/** _bars: the chords sounding in each bar, a pickup bar first when the first downbeat is late.
- *  Bars shorter than [minLength] are dropped. */
-internal fun bars(downbeats: DoubleArray, end: Double, chords: List<ChordSegment>, minLength: Double = 1e-3): List<Bar> {
+/** _bars: the chords sounding in each bar, a pickup bar first when the first downbeat is late. */
+internal fun bars(downbeats: DoubleArray, end: Double, chords: List<ChordSegment>): List<Bar> {
     val bounds = ArrayList(downbeats.toList()).apply { add(end) }
     if (bounds[0] > 0.3) bounds.add(0, 0.0) // pickup before the first downbeat
     val out = ArrayList<Bar>()
     for (i in 0 until bounds.size - 1) {
         val start = bounds[i]
         val stop = bounds[i + 1]
-        if (stop - start < minLength) continue
-        val names = ArrayList<String>()
-        for (chord in chords) {
-            val overlap = minOf(stop, chord.end) - maxOf(start, chord.start)
-            if (overlap >= 0.25 * (stop - start) && (names.isEmpty() || names.last() != chord.display)) names += chord.display
-        }
-        out += Bar(pyRound(start, 3), pyRound(stop, 3), names)
+        if (stop - start < 1e-3) continue
+        out += Bar(pyRound(start, 3), pyRound(stop, 3), barChords(start, stop, chords))
     }
     return out
+}
+
+/** The names of the chords sounding in the bar [start]..[stop]: those covering a quarter of it,
+ *  without repeating the one just named. Shared by [bars] and [rebuild]. */
+internal fun barChords(start: Double, stop: Double, chords: List<ChordSegment>): List<String> {
+    val names = ArrayList<String>()
+    for (chord in chords) {
+        val overlap = minOf(stop, chord.end) - maxOf(start, chord.start)
+        if (overlap >= 0.25 * (stop - start) && (names.isEmpty() || names.last() != chord.display)) names += chord.display
+    }
+    return names
 }
 
 /** Python's f"{x:.0%}". */
