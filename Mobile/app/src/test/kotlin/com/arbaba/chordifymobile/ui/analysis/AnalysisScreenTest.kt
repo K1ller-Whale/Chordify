@@ -1,6 +1,15 @@
 package com.arbaba.chordifymobile.ui.analysis
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -35,9 +44,42 @@ class AnalysisScreenTest {
     private val clock = PlaybackClock(loop.source.duration)
     private var notations = mutableListOf<Notation>()
 
-    private fun showScreen(size: DpSize) = rule.show(size) {
-        AnalysisContent("Loop", loop, clock, Notation.LETTERS, 0, AudioFile.PLAYABLE, false,
+    private fun showScreen(size: DpSize, audio: AudioFile = AudioFile.PLAYABLE, capo: Int = 0) = rule.show(size) {
+        AnalysisContent("Loop", loop, clock, Notation.LETTERS, capo, audio, false,
             onNotation = { notations += it }, onCapo = {}, onPickFile = {})
+    }
+
+    /** Every tab's label is laid out whole on one line (real fonts: graphicsMode=NATIVE). */
+    private fun tabLabelsFit(size: DpSize) {
+        showScreen(size)
+        val inATab = hasAnyAncestor(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
+        for (tab in PanelTab.entries) {
+            val label = rule.onNode(hasText(tab.label) and inATab, useUnmergedTree = true).fetchSemanticsNode()
+            val layouts = mutableListOf<TextLayoutResult>()
+            label.config[SemanticsActions.GetTextLayoutResult].action!!(layouts)
+            val layout = layouts.single()
+            val natural = layout.multiParagraph.intrinsics.maxIntrinsicWidth
+            val room = layout.layoutInput.constraints.maxWidth
+            assertTrue("\"${tab.label}\" needs $natural px at $size, it has $room px", natural <= room)
+            assertFalse("\"${tab.label}\" is cut to one line at $size", layout.multiParagraph.didExceedMaxLines)
+        }
+    }
+
+    @Test fun tabLabelsFitALandscapePhone() = tabLabelsFit(LANDSCAPE)
+    @Test fun tabLabelsFitANarrowerLandscapePhone() = tabLabelsFit(DpSize(730.dp, 360.dp))
+    @Test fun tabLabelsFitAPortraitPhone() = tabLabelsFit(PORTRAIT)
+
+    @Test fun theNoAudioBannerSitsAboveTheStageNotOverIt() {
+        showScreen(DpSize(730.dp, 336.dp), audio = AudioFile.MISSING, capo = 2) // a 360 dp-tall phone, less its status bar
+        val banner = rule.onNodeWithTag("noAudio").getUnclippedBoundsInRoot()
+        val stage = rule.onNodeWithTag("stage").getUnclippedBoundsInRoot()
+        assertTrue("banner ${banner.bottom} must end before the stage ${stage.top}", banner.bottom <= stage.top)
+        for (tag in listOf("nowName", "theoryLine", "soundsAs")) {
+            val line = rule.onNodeWithTag(tag, useUnmergedTree = true).getUnclippedBoundsInRoot()
+            assertTrue("$tag $line must be inside the stage $stage", line.top >= stage.top && line.bottom <= stage.bottom)
+        }
+        val diagram = rule.onNode(hasContentDescription("Guitar chord diagram", substring = true)).getUnclippedBoundsInRoot()
+        assertTrue("diagram $diagram must be inside the stage $stage", diagram.top >= stage.top && diagram.bottom <= stage.bottom)
     }
 
     @Test fun landscapePutsThePanelBesideTheStage() {
