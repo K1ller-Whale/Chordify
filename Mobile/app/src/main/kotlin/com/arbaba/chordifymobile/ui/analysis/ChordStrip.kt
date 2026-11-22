@@ -39,7 +39,9 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
@@ -74,8 +76,9 @@ private const val SNAP_DP = 6f
 fun stripName(chord: ChordSegment, notation: Notation): String =
     chordName(chord, notation) + if (chord.edited) " ✎" else ""
 
-/** An edge being dragged: edge k is the boundary between chords k-1 and k, [time] where the finger has it. */
-private class EdgeDrag(val edge: Int, val time: Double)
+/** An edge being dragged: edge k is the boundary between chords k-1 and k. The finger is at [x] (px, in the strip)
+ *  and grabbed the edge [grab] seconds away from the point under it, so the edge follows the finger as the strip moves. */
+private class EdgeDrag(val edge: Int, val x: Float, val grab: Double)
 
 /** The chords coming up, sliding toward a fixed playhead (the timeline's detail track, 72 dp tall). */
 @Composable
@@ -104,14 +107,31 @@ fun ChordStrip(result: AnalysisResult, time: State<Double>, current: Int, notati
     val stripHeight = if (editing) EDIT_HEIGHT else HEIGHT
     val ribH = if (editing) EDIT_RIB_H else RIB_H
     val waveY = stripHeight - 2 - WAVE_H
+    val playheadFraction = PLAYHEAD
+    // Where a drag puts its edge now: under the finger, whatever the strip has moved since, snapped and kept between its neighbours.
+    fun edgeTime(d: EdgeDrag, widthPx: Float): Double {
+        val chords = resultNow.chords
+        val raw = time.value + (d.x - widthPx * playheadFraction) / pps + d.grab
+        val snap = SNAP_DP / PIXELS_PER_SECOND.toDouble()
+        return snapToBeat(raw.coerceIn(chords[d.edge - 1].start, chords[d.edge].end), resultNow.beats, snap)
+    }
     BoxWithConstraints(modifier.fillMaxWidth().height(stripHeight.dp).clipToBounds()
                            .background(scheme.surface)
                            .testTag("strip")
-                           .semantics { contentDescription = "Timeline of ${result.chords.size} chords: tap or drag to move through the song" }
+                           .semantics {
+                               if (editing) {
+                                   contentDescription = "Chord strip, double-tap a chord to select it"
+                                   // Without a pointer: the chord at the playhead and its neighbours.
+                                   customActions = (current - 1..current + 2).filter { it in result.chords.indices }.map { i ->
+                                       CustomAccessibilityAction("Select chord ${i + 1}, ${chordName(result.chords[i], notation)}") { onSelectNow(i); true }
+                                   }
+                               } else {
+                                   contentDescription = "Timeline of ${result.chords.size} chords: tap or drag to move through the song"
+                               }
+                           }
                            .then(if (editing) {
                                Modifier.pointerInput(pps) {
                                    val reach = HANDLE_REACH.dp.toPx()
-                                   val snap = SNAP_DP / PIXELS_PER_SECOND.toDouble()
                                    awaitEachGesture {
                                        val down = awaitFirstDown()
                                        val chords = resultNow.chords
@@ -123,33 +143,37 @@ fun ChordStrip(result: AnalysisResult, time: State<Double>, current: Int, notati
                                                .filter { kotlin.math.abs(xOf(chords[it].start) - down.position.x) <= reach }
                                                .minByOrNull { kotlin.math.abs(xOf(chords[it].start) - down.position.x) }
                                        }
-                                       val startTime = handle?.let { chords[it].start } ?: 0.0
+                                       val grab = handle?.let { chords[it].start - (time.value + (down.position.x - playheadX) / pps) } ?: 0.0
                                        var last = down.position.x
                                        val over = awaitHorizontalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
                                        if (over != null) {
-                                           fun follow(x: Float) {
-                                               if (handle != null) {
-                                                   // Snapped as it moves, so what is drawn is what is reported.
-                                                   val raw = startTime + (x - down.position.x) / pps
-                                                   val t = snapToBeat(raw.coerceIn(chords[handle - 1].start, chords[handle].end), resultNow.beats, snap)
-                                                   drag = EdgeDrag(handle, t)
-                                               } else {
-                                                   onSeekNow(time.value - (x - last) / pps)
+                                           try {
+                                               fun follow(x: Float) {
+                                                   if (handle != null) drag = EdgeDrag(handle, x, grab)
+                                                   else onSeekNow(time.value - (x - last) / pps)
+                                                   last = x
                                                }
-                                               last = x
+                                               follow(over.position.x)
+                                               val finished = horizontalDrag(over.id) { change ->
+                                                   change.consume()
+                                                   follow(change.position.x)
+                                               }
+                                               val done = drag
+                                               if (finished && handle != null && done != null) {
+                                                   onMoveEdgeNow(done.edge, edgeTime(done, size.width.toFloat()))
+                                               }
+                                           } finally {
+                                               drag = null
                                            }
-                                           follow(over.position.x)
-                                           horizontalDrag(over.id) { change ->
-                                               change.consume()
-                                               follow(change.position.x)
+                                       } else {
+                                           // A tap: the finger came up, near where it went down, and nobody took the gesture.
+                                           val up = currentEvent.changes.firstOrNull { it.id == down.id }
+                                           if (up != null && !up.pressed && !up.isConsumed && chords.isNotEmpty() &&
+                                               (up.position - down.position).getDistance() <= viewConfiguration.touchSlop) {
+                                               val t = time.value + (down.position.x - playheadX) / pps
+                                               val index = chords.indexOfFirst { t < it.end }.let { if (it < 0) chords.lastIndex else it }
+                                               onSelectNow(index)
                                            }
-                                           val done = drag
-                                           drag = null
-                                           if (handle != null && done != null) onMoveEdgeNow(done.edge, done.time)
-                                       } else if (!down.isConsumed && chords.isNotEmpty()) {
-                                           val t = time.value + (down.position.x - playheadX) / pps
-                                           val index = chords.indexOfFirst { t < it.end }.let { if (it < 0) chords.lastIndex else it }
-                                           onSelectNow(index)
                                        }
                                    }
                                }
@@ -188,8 +212,9 @@ fun ChordStrip(result: AnalysisResult, time: State<Double>, current: Int, notati
                 val color = colors.of(functionHue(chord.function))
                 val active = i == current
                 val d = drag
-                val start = if (d != null && d.edge == i) d.time else chord.start
-                val end = if (d != null && d.edge == i + 1) d.time else chord.end
+                val dragged = d?.let { edgeTime(it, width) }
+                val start = if (d != null && d.edge == i) dragged!! else chord.start
+                val end = if (d != null && d.edge == i + 1) dragged!! else chord.end
                 val x = start.toFloat() * pps + u
                 val w = max(2 * u, (end - start).toFloat() * pps - 2 * u)
                 val alpha = if (chord.confidence < 0.35 && !none) 0.6f else 1f
