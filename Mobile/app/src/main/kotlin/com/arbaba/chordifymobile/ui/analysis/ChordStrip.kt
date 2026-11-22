@@ -61,7 +61,9 @@ private const val WAVE_H = 16f
 /** The chords coming up, sliding toward a fixed playhead (the timeline's detail track, 72 dp tall). */
 @Composable
 fun ChordStrip(result: AnalysisResult, time: State<Double>, current: Int, notation: Notation,
-               peaks: FloatArray?, surprising: Set<Int>, onSeek: (Double) -> Unit, modifier: Modifier = Modifier) {
+               peaks: FloatArray?, surprising: Set<Int>, onSeek: (Double) -> Unit, modifier: Modifier = Modifier,
+               editing: Boolean = false, selected: Int? = null, onSelect: (Int) -> Unit = {},
+               onMoveEdge: (edge: Int, time: Double) -> Unit = { _, _ -> }) {
     val colors = LocalChordifyColors.current
     val scheme = MaterialTheme.colorScheme
     val measurer = rememberTextMeasurer()
