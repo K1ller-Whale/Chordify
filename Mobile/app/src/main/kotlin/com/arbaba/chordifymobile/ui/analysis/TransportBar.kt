@@ -50,7 +50,8 @@ import kotlin.math.max
 @Composable
 fun TransportBar(result: AnalysisResult, time: State<Double>, playing: Boolean, rate: Double,
                  visibleSeconds: Double, onToggle: () -> Unit, onSeek: (Double) -> Unit,
-                 onRate: (Double) -> Unit, modifier: Modifier = Modifier) {
+                 onRate: (Double) -> Unit, modifier: Modifier = Modifier,
+                 looping: Boolean? = null, onLoop: () -> Unit = {}) {
     // 8 dp between the parts, so that the seek bar keeps 120 dp on a 360 dp-wide phone held upright.
     Row(modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)) {

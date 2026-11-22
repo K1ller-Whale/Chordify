@@ -36,7 +36,10 @@ private val KEY_LINE_MIN_WIDTH = 480.dp
 fun AnalysisTopBar(title: String, analysed: AnalysisResult, capo: Int, suggestion: CapoSuggestion,
                    notation: Notation, onBack: () -> Unit, onCapo: (Int) -> Unit,
                    onNotation: (Notation) -> Unit, onExport: (ExportFormat) -> Unit,
-                   onPickFile: () -> Unit, modifier: Modifier = Modifier) {
+                   onPickFile: () -> Unit, modifier: Modifier = Modifier,
+                   editing: Boolean = false, canUndo: Boolean = false, canRedo: Boolean = false, hasEdits: Boolean = false,
+                   onEdit: () -> Unit = {}, onUndo: () -> Unit = {}, onRedo: () -> Unit = {},
+                   onCancelEdit: () -> Unit = {}, onDone: () -> Unit = {}, onRestore: () -> Unit = {}) {
     var choosingCapo by remember { mutableStateOf(false) }
     var more by remember { mutableStateOf(false) }
     BoxWithConstraints(modifier) {
