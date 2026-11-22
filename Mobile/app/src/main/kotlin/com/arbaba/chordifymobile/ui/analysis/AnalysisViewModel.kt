@@ -7,6 +7,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.arbaba.chordifymobile.ChordifyApp
 import com.arbaba.chordifymobile.data.Analysis
+import com.arbaba.chordifymobile.edit.EditActions
+import com.arbaba.chordifymobile.edit.EditUiState
 import com.arbaba.chordifymobile.data.ExportFormat
 import com.arbaba.chordifymobile.data.exportFile
 import com.arbaba.chordifymobile.data.shareIntent
@@ -27,11 +29,21 @@ import kotlinx.coroutines.withContext
 /** Whether the analysed audio can be played: still being checked, playable, or gone. */
 enum class AudioFile { CHECKING, PLAYABLE, MISSING }
 
-class AnalysisViewModel(application: Application, private val id: String) : AndroidViewModel(application) {
+class AnalysisViewModel(application: Application, private val id: String) : AndroidViewModel(application), EditActions {
     private val library = (application as ChordifyApp).container.library
 
     val analysis: StateFlow<Analysis?> = library.observe(id).stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    /** The shown result: the rebuilt one when edits are saved, otherwise the model's. */
     val result = MutableStateFlow<AnalysisResult?>(null)
+
+    /** The model's result. */
+    val original: StateFlow<AnalysisResult?> = MutableStateFlow(null)
+    val hasEdits: StateFlow<Boolean> = MutableStateFlow(false)
+    val savedShapes: StateFlow<Map<String, List<Int>>> = MutableStateFlow(emptyMap())
+    val editsDamaged: StateFlow<Boolean> = MutableStateFlow(false)
+
+    /** The editing session; null when not editing. */
+    val edit: StateFlow<EditUiState?> = MutableStateFlow(null)
     val notation = MutableStateFlow(Notation.LETTERS)
     val audio = MutableStateFlow(AudioFile.CHECKING)
     val mismatch = MutableStateFlow(false)
@@ -87,6 +99,25 @@ class AnalysisViewModel(application: Application, private val id: String) : Andr
         val app = getApplication<Application>()
         open(withContext(Dispatchers.IO) { shareIntent(app, exportFile(app, row.displayName, analysed, format), format) })
     }
+
+    // -- editing (V1) ---------------------------------------------------------------------------
+
+    override fun startEditing() {}
+    override fun cancelEditing() {}
+    override fun done() {}
+    override fun restore() {}
+    override fun select(index: Int?) {}
+    override fun moveEdge(edge: Int, time: Double) {}
+    override fun setStart(index: Int, time: Double) {}
+    override fun setEnd(index: Int, time: Double) {}
+    override fun split(index: Int, time: Double) {}
+    override fun mergeWithNext(index: Int) {}
+    override fun rename(index: Int, soundingLabel: String) {}
+    override fun setShape(shapeLabel: String, shape: List<Int>?) {}
+    override fun undo() {}
+    override fun redo() {}
+    override fun toggleLoop() {}
+    override suspend fun suggestions(index: Int): List<String> = emptyList()
 
     override fun onCleared() {
         clock?.pause()
