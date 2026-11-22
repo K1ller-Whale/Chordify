@@ -75,6 +75,9 @@ fun LeadSheet(result: AnalysisResult, notation: Notation, currentBar: Int, modif
         return
     }
     val byDisplay = remember(result) { result.chords.associateBy { it.display } }
+    val editedMarks = remember(result) {
+        buildSet { result.bars.forEachIndexed { i, bar -> bar.chords.forEach { if (isEditedIn(result, bar, it)) add(i to it) } } }
+    }
     val grid = rememberLazyGridState()
     LaunchedEffect(currentBar) {
         if (currentBar >= 0) grid.animateScrollToItem(max(0, (currentBar / 4 - 2) * 4)) // the current row in the middle
@@ -83,7 +86,7 @@ fun LeadSheet(result: AnalysisResult, notation: Notation, currentBar: Int, modif
                      modifier = modifier.fillMaxSize().testTag("leadSheet")) {
         itemsIndexed(result.bars) { i, bar ->
             val text = bar.chords.joinToString("  ") {
-                (if (notation == Notation.ROMAN) byDisplay[it]?.roman ?: it else it) + if (isEditedIn(result, bar, it)) EDITED_MARK else ""
+                (if (notation == Notation.ROMAN) byDisplay[it]?.roman ?: it else it) + if ((i to it) in editedMarks) EDITED_MARK else ""
             }.ifEmpty { "·" }
             val shape = RoundedCornerShape(6.dp)
             val cell = Modifier.padding(2.dp).clip(shape).clickable { onSeek(bar.start + 0.01) }.testTag("bar$i")

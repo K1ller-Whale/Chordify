@@ -156,6 +156,10 @@ class StageTest {
         rule.show { Stage(c, Notation.LETTERS, 0, null, {}, shape = null) }
         rule.onNodeWithTag("nowName", useUnmergedTree = true).assertTextEquals("C")
         diagrams().assertCountEquals(0)
+        // not even the "no diagram" placeholder is composed
+        rule.onAllNodes(SemanticsMatcher("placeholder") {
+            it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(diagramDescription(null, 0)) == true
+        }, useUnmergedTree = true).assertCountEquals(0)
     }
 
     @Test fun editedChordHasNoBadge() {
