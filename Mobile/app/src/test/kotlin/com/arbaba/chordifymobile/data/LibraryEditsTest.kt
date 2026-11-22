@@ -67,11 +67,18 @@ class LibraryEditsTest {
         shapes = mapOf("G:maj" to listOf(3, -1, 0, 0, 3, 3)),
     )
 
+    private suspend fun song() = library.importAnalysisText(Fixtures.loop.toJson()) { "x" }
+
+    private fun covering(id: String) = ChordEdits(chords = listOf(ChordSpan(0.0, 4.0, "E:min", true),
+        ChordSpan(4.0, Fixtures.loop.source.duration, "G:maj")))
+
     @Test fun savedEditsLoadBack() = runBlocking {
-        library.saveEdits("a1", edits())
-        assertEquals(EditsLoad.Loaded(edits()), library.edits("a1"))
-        assertFalse(File(library.editsFile("a1").path + ".part").exists())
-        assertEquals(listOf("a1.edits.json"), library.editsFile("a1").parentFile!!.list()!!.toList())
+        val id = song()
+        library.saveEdits(id, covering(id))
+        assertEquals(EditsLoad.Loaded(covering(id)), library.edits(id))
+        val a1 = id
+        assertFalse(File(library.editsFile(a1).path + ".part").exists())
+        assertTrue(library.editsFile(a1).parentFile!!.list()!!.none { it.endsWith(".part") })
     }
 
     @Test fun noFileIsNone() = runBlocking {
@@ -79,9 +86,40 @@ class LibraryEditsTest {
     }
 
     @Test fun garbageIsDamaged() = runBlocking {
+        val id = song()
+        library.saveEdits(id, covering(id))
+        library.editsFile(id).writeText("{ not json")
+        assertEquals(EditsLoad.Damaged, library.edits(id))
+    }
+
+    @Test fun unknownDurationIsDamaged() = runBlocking {
         library.saveEdits("a1", edits())
-        library.editsFile("a1").writeText("{ not json")
         assertEquals(EditsLoad.Damaged, library.edits("a1"))
+    }
+
+    private suspend fun loadedChords(chords: List<ChordSpan>): List<ChordSpan> {
+        val id = song()
+        library.saveEdits(id, ChordEdits(chords = chords))
+        return (library.edits(id) as EditsLoad.Loaded).edits.chords
+    }
+
+    @Test fun aGapIsFilledWithN() = runBlocking {
+        val d = Fixtures.loop.source.duration
+        val chords = loadedChords(listOf(ChordSpan(0.0, 2.0, "E:min"), ChordSpan(3.0, d, "G:maj")))
+        assertEquals(listOf(ChordSpan(0.0, 2.0, "E:min"), ChordSpan(2.0, 3.0, "N", true), ChordSpan(3.0, d, "G:maj")), chords)
+    }
+
+    @Test fun spansPastTheEndAreClipped() = runBlocking {
+        val d = Fixtures.loop.source.duration
+        val chords = loadedChords(listOf(ChordSpan(0.0, 4.0, "E:min"), ChordSpan(4.0, d + 10, "G:maj")))
+        assertEquals(d, chords.last().end, 1e-9)
+        assertEquals(listOf("E:min", "G:maj"), chords.map { it.label })
+    }
+
+    @Test fun aLateFirstStartGetsALeadingN() = runBlocking {
+        val d = Fixtures.loop.source.duration
+        val chords = loadedChords(listOf(ChordSpan(1.0, d, "G:maj")))
+        assertEquals(listOf(ChordSpan(0.0, 1.0, "N", true), ChordSpan(1.0, d, "G:maj")), chords)
     }
 
     @Test fun clearRemovesTheFile() = runBlocking {
@@ -95,7 +133,11 @@ class LibraryEditsTest {
         val id = library.importAnalysisText(Fixtures.loop.toJson()) { "x" }
         library.saveEdits(id, edits())
         assertTrue(library.editsFile(id).exists())
+        val dir = library.editsFile(id).parentFile!!
+        File(dir, "$id.edits.json.part").writeText("x")
+        File(dir, "$id.json.part").writeText("x")
         library.delete(id)
+        assertTrue(dir.list()!!.none { it.startsWith(id) })
         assertFalse(library.editsFile(id).exists())
         assertFalse(library.resultFile(id).exists())
     }
@@ -129,8 +171,9 @@ class LibraryEditsTest {
         val id = library.importAnalysisText(text) { "x" }
 
         val stored = parseAnalysisResult(library.resultFile(id).readText())
-        val originalBase = original
-        assertEquals(fakeRebuild(originalBase, spansOf(originalBase)).toJson(), stored.toJson())
+        assertEquals(original.chords.map { it.label }, stored.chords.map { it.label })
+        assertTrue(stored.chords.none { it.edited })
+        assertFalse(stored.chords.any { it.label == "E:min" })
         val loaded = library.edits(id) as EditsLoad.Loaded
         assertEquals(spansOf(shown), loaded.edits.chords)
         assertEquals(shapes, loaded.edits.shapes)

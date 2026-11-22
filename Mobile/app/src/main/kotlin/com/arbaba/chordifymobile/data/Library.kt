@@ -8,6 +8,7 @@ import android.provider.OpenableColumns
 import com.arbaba.chordifymobile.edit.ChordEdits
 import com.arbaba.chordifymobile.edit.EditsLoad
 import com.arbaba.chordifymobile.edit.decodeEdits
+import com.arbaba.chordifymobile.edit.normalise
 import com.arbaba.chordifymobile.edit.encodeEdits
 import com.arbaba.chordifymobile.edit.spansOf
 import com.arbaba.chordifymobile.engine.analysis.AnalysisOptions
@@ -183,6 +184,8 @@ class Library(
         resultFile(id).delete()
         editsFile(id).delete()
         peaksFile(id).delete()
+        File(resultsDir, "$id.edits.json.part").delete()
+        File(resultsDir, "$id.json.part").delete()
         if (row.ownsFile) Uri.parse(row.fileUri).path?.let { File(it).delete() }
     }
 
@@ -216,7 +219,12 @@ class Library(
         val file = editsFile(id)
         if (!file.exists()) return@withContext EditsLoad.None
         try {
-            EditsLoad.Loaded(decodeEdits(file.readText()))
+            val edits = decodeEdits(file.readText())
+            val duration = resultFile(id).takeIf { it.exists() }?.let { parseAnalysisResult(it.readText()).source.duration }
+                ?: dao.get(id)?.duration
+                ?: return@withContext EditsLoad.Damaged
+            // Spans past the song are clipped and gaps filled with N (spec §4), so rebuild gets a cover.
+            EditsLoad.Loaded(edits.copy(chords = normalise(edits.chords, duration)))
         } catch (_: Exception) {
             EditsLoad.Damaged
         }
