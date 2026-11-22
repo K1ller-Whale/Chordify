@@ -215,9 +215,9 @@ one implementation:
   later saves or clears the song's edits, it is first moved aside to `<id>.edits.damaged.json`, so
   nothing is destroyed; deleting the analysis deletes that file too.
 - **Edits that cannot be rebuilt.** A file that reads fine but whose chords cannot be rebuilt right
-  now (for example, a label this version cannot describe, or a model that fails to load) is not damage: the model's chords show with a short message,
-  "Could not update the chords: …", **Restore** stays available, and **✎** starts editing from the
-  saved edits, rebuilding them again.
+  now (for example, when a model fails to load) is not damage. The model's chords show with a short
+  message, "Could not update the chords: …", **Restore** stays available, and **✎** starts editing
+  from the saved edits, rebuilding them again.
 - **Other messages.** A failed **Restore** ("Could not restore the model's chords: …") and an editing
   session that cannot start because its first rebuild fails are told in a short message at the
   bottom of the screen.
