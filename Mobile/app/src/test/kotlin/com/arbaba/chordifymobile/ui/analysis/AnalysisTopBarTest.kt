@@ -3,6 +3,7 @@ package com.arbaba.chordifymobile.ui.analysis
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasTestTag
@@ -113,6 +114,13 @@ class AnalysisTopBarTest {
     @Test fun everyControlIsNamedWhileEditing() {
         show(editing = true, canUndo = true, canRedo = true)
         rule.assertEveryControlNamed()
+    }
+
+    @Test fun theEditingTitleIsNotSqueezedInPortrait() {
+        show(PORTRAIT, editing = true, canUndo = true, canRedo = true)
+        val portrait = rule.onNodeWithText("✎ Editing").getUnclippedBoundsInRoot().let { it.right - it.left }
+        assertTrue("title is $portrait wide", portrait >= 84.dp)
+        for (tag in listOf("undo", "redo", "cancelEdit", "done")) rule.onNodeWithTag(tag).assertIsDisplayed()
     }
 
     @Test fun editingFitsPortrait() {

@@ -1,8 +1,9 @@
 package com.arbaba.chordifymobile.ui.analysis
 
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
@@ -14,8 +15,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.semantics.Role
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -105,6 +107,11 @@ fun AnalysisTopBar(title: String, analysed: AnalysisResult, capo: Int, suggestio
 /** A compact text action of the editing bar; the core icon set has no undo or redo icon. */
 @Composable
 private fun BarText(text: String, tag: String, enabled: Boolean, onClick: () -> Unit) {
-    TextButton(onClick = onClick, enabled = enabled, contentPadding = PaddingValues(horizontal = 8.dp),
-        modifier = Modifier.testTag(tag).semantics { contentDescription = text }) { Text(text) }
+    // Not a TextButton: its 58 dp minimum width would squeeze the title on a 360 dp-wide phone.
+    val ink = MaterialTheme.colorScheme.primary
+    Box(Modifier.heightIn(min = 48.dp).testTag(tag).semantics { contentDescription = text }
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick).padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center) {
+        Text(text, style = MaterialTheme.typography.labelLarge, color = if (enabled) ink else ink.copy(alpha = 0.38f))
+    }
 }

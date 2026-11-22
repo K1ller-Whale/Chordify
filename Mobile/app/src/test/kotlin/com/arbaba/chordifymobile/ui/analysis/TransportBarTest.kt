@@ -6,7 +6,9 @@ import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -103,6 +105,22 @@ class TransportBarTest {
     @Test fun loopChipShowsSelectedWhenLooping() {
         showLooping(true)
         rule.onNodeWithTag("loop").assertIsSelected()
+    }
+
+    @Test fun theSeekBarKeepsItsWidthWithTheLoopChipInPortrait() {
+        showLooping(true, PORTRAIT)
+        val width = rule.onNodeWithTag("seekBar").getUnclippedBoundsInRoot().let { it.right - it.left }
+        assertTrue("seek bar is $width wide", width >= 120.dp)
+        val chip = rule.onNodeWithTag("loop").getUnclippedBoundsInRoot()
+        val play = rule.onNodeWithTag("play").getUnclippedBoundsInRoot()
+        assertTrue("chip is above the main row", chip.bottom <= play.top + 1.dp)
+    }
+
+    @Test fun theLoopChipSharesTheRowWithTheSeekBarInLandscape() {
+        showLooping(true, LANDSCAPE)
+        val chip = rule.onNodeWithTag("loop").getUnclippedBoundsInRoot()
+        val seek = rule.onNodeWithTag("seekBar").getUnclippedBoundsInRoot()
+        assertTrue("chip $chip and seek bar $seek are on one row", chip.top < seek.bottom && seek.top < chip.bottom)
     }
 
     @Test fun loopChipFitsPortraitAndIsNamed() {
