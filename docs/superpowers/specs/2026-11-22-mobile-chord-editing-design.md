@@ -1,6 +1,6 @@
 # Correcting the chords on the phone
 
-Status: design agreed, 2026-11-22. Milestone M8 of the
+Status: built, 2026-11-22. Milestone M8 of the
 [mobile app](2026-11-17-mobile-on-device-design.md), building on M7's
 [landscape-first UI](2026-11-21-mobile-simple-landscape-ui-design.md).
 

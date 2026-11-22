@@ -18,6 +18,7 @@ network access. Design:
   waveform. `quick/` is Quick chord, `songwriter/` the Songwriter, and `ui/` holds the other
   screens: the Library, the analysis screen (a play-along stage with a chord strip and one panel beside it,
   landscape first), Settings and About.
+  `edit/` is correcting the chords by hand: the edit operations, the editing session and the rebuild of the analysis from the corrected chords.
 
 Chordify Mobile is free software under the GPL, version 3 or later ([`LICENSE`](LICENSE)),
 because it bundles NNLS Chroma (GPL-2.0-or-later). What else it bundles, and under which

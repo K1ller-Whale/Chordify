@@ -27,7 +27,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
-import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
@@ -129,6 +128,15 @@ class LibraryEditsTest {
         assertEquals(EditsLoad.None, library.edits("a1"))
     }
 
+    @Test fun aFailedDeleteIsReported() = runBlocking {
+        val file = library.editsFile("a1")
+        file.parentFile!!.mkdirs()
+        file.mkdirs() // a non-empty directory cannot be deleted like a file
+        File(file, "stuck").writeText("x")
+        val error = runCatching { library.clearEdits("a1") }.exceptionOrNull()
+        assertTrue("clearEdits threw $error", error is java.io.IOException)
+    }
+
     @Test fun deleteRemovesTheEditsToo() = runBlocking {
         val id = library.importAnalysisText(Fixtures.loop.toJson()) { "x" }
         library.saveEdits(id, edits())
@@ -149,7 +157,6 @@ class LibraryEditsTest {
         assertEquals(Library.IMPORTED, library.get(id)!!.modelFingerprint)
     }
 
-    @Ignore("needs X1's readExport")
     @Test fun importWithEditsKeepsTheModelsOriginalAndTheEdits() = runBlocking {
         val original = Fixtures.loop
         val shown = original.copy(chords = original.chords.mapIndexed { i, c ->
