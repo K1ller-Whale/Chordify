@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.arbaba.chordifymobile.music.Notation
+import com.arbaba.chordifymobile.music.shapeKey
 import com.arbaba.chordifymobile.music.suggestCapo
 import com.arbaba.chordifymobile.playback.PlaybackClock
 import com.arbaba.chordifymobile.ui.ChordifyTheme
@@ -27,6 +28,24 @@ import com.arbaba.chordifymobile.ui.Fixtures
 import com.arbaba.chordifymobile.ui.LANDSCAPE
 import com.arbaba.chordifymobile.ui.PORTRAIT
 import com.arbaba.chordifymobile.ui.show
+import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollTo
+import com.arbaba.chordifymobile.edit.ChordEdits
+import com.arbaba.chordifymobile.edit.EditsLoad
+import com.arbaba.chordifymobile.edit.RESTORE_FAILED
+import com.arbaba.chordifymobile.edit.SongEdits
+import com.arbaba.chordifymobile.edit.spansOf
+import com.arbaba.chordifymobile.engine.analysis.ChordSpan
+import com.arbaba.chordifymobile.engine.model.AnalysisResult
+import com.arbaba.chordifymobile.engine.model.Bar
+import com.arbaba.chordifymobile.engine.vocab.displayName
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import java.io.IOException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -140,4 +159,132 @@ class AnalysisFlowTest {
         val width = rule.onNodeWithTag("seekBar").getUnclippedBoundsInRoot().let { it.right - it.left }
         assertTrue("seek bar is $width wide", width >= 120.dp)
     }
+
+    // -- chord editing, end to end with the view model's own SongEdits and a fake rebuild -----------
+
+    private val saved = mutableListOf<ChordEdits>()
+
+    /** What AnalysisViewModel holds: the same SongEdits, with the library and the engine replaced by fakes. */
+    private fun songEdits(stored: EditsLoad = EditsLoad.None, clear: suspend () -> Unit = {}) = SongEdits(
+        scope = CoroutineScope(Dispatchers.Unconfined),
+        rebuild = { result, spans -> fakeRebuild(result, spans) },
+        load = { stored }, save = { saved += it }, clear = clear, setAside = {},
+        next = { _, _ -> emptyList() },
+    ).also { runBlocking { it.open(loop) } }
+
+    /** The screen as AnalysisScreen shows it from the view model. */
+    private fun showEditing(edits: SongEdits) = rule.show(LANDSCAPE) {
+        val shown by edits.shown.collectAsState()
+        val edit by edits.edit.collectAsState()
+        val hasEdits by edits.hasEdits.collectAsState()
+        val shapes by edits.savedShapes.collectAsState()
+        val damaged by edits.damaged.collectAsState()
+        AnalysisContent("Loop", shown!!, clock, Notation.LETTERS, 0, AudioFile.PLAYABLE, false,
+            onNotation = {}, onCapo = {}, onPickFile = {}, shapes = shapes, hasEdits = hasEdits,
+            editsDamaged = damaged, edit = edit, editActions = edits, messages = edits.messages)
+    }
+
+    @Test fun editingAChordEndToEnd() {
+        val edits = songEdits()
+        showEditing(edits)
+        val g = loop.chords[1]
+        val middle = (g.start + g.end) / 2
+        fun spans() = edits.edit.value!!.spans
+
+        // enter editing and select chord 1 with a tap on its block
+        rule.runOnIdle { clock.seek(middle) }
+        rule.onNodeWithTag("edit").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("editHint").assertExists()
+        rule.onNodeWithTag("strip").performTouchInput { click(Offset(width * PLAYHEAD, centerY)) }
+        rule.waitForIdle()
+        assertEquals(1, edits.edit.value!!.selected)
+        rule.onNodeWithTag("editPanel").assertExists()
+        nowName().assertTextEquals("G")
+
+        // Change chord... -> E minor
+        rule.onNodeWithText("Change chord…").performScrollTo().performClick()
+        rule.onNodeWithTag("chordPicker").assertExists()
+        rule.onNodeWithTag("root:E").performScrollTo().performClick()
+        rule.onNodeWithTag("type:minor").performScrollTo().performClick()
+        rule.onNodeWithText("Use Em").assertExists()
+        rule.onNodeWithTag("pickerUse").performClick()
+        rule.waitForIdle()
+        rule.onNodeWithTag("chordPicker").assertDoesNotExist()
+        nowName().assertTextEquals("Em")
+        assertEquals("E:min", spans()[1].label)
+        assertEquals("Em ✎", stripName(edits.edit.value!!.preview.chords[1], Notation.LETTERS))
+
+        // drag the end of chord 1 earlier
+        val end = spans()[1].end
+        rule.onNodeWithTag("strip").performTouchInput {
+            val pps = PIXELS_PER_SECOND.dp.toPx()
+            down(Offset(width * PLAYHEAD + ((end - middle) * pps).toFloat(), centerY))
+            moveBy(Offset(-35.dp.toPx(), 0f))
+            up()
+        }
+        rule.waitForIdle()
+        val moved = spans()[1].end
+        assertTrue("edge moved from $end to $moved", moved < end - 0.2)
+        assertTrue(spans()[1].edited && spans()[2].edited)
+        rule.onNodeWithTag("undo").assertIsEnabled()
+
+        // Undo takes the move back and keeps the rename
+        rule.onNodeWithTag("undo").performClick()
+        rule.waitForIdle()
+        assertEquals(end, spans()[1].end, 1e-9)
+        assertEquals("E:min", spans()[1].label)
+
+        // Done saves, leaves editing, and the lead sheet marks the chord
+        rule.onNodeWithTag("done").performClick()
+        rule.waitForIdle()
+        assertEquals(1, saved.size)
+        assertEquals("E:min", saved[0].chords[1].label)
+        assertEquals(null, edits.edit.value)
+        rule.onNodeWithTag("edit").assertExists()
+        assertEquals("Em", edits.shown.value!!.chords[1].display)
+        rule.onNodeWithText(PanelTab.SHEET.label).performClick()
+        rule.waitForIdle()
+        val marked = rule.onAllNodes(hasText("Em ✎", substring = true)).fetchSemanticsNodes()
+        assertTrue("the lead sheet marks Em", marked.isNotEmpty())
+    }
+
+    @Test fun editingStartsFromTheSavedEdits() {
+        val stored = ChordEdits(chords = spansOf(loop).mapIndexed { i, s -> if (i == 1) s.copy(label = "E:min", edited = true) else s })
+        val edits = songEdits(EditsLoad.Loaded(stored))
+        showEditing(edits)
+        rule.onNodeWithTag("edit").performClick()
+        rule.waitForIdle()
+        assertEquals(stored.chords, edits.edit.value!!.spans)
+        rule.onNodeWithTag("done").performClick()
+        rule.waitForIdle()
+        assertEquals(listOf(stored), saved)
+    }
+
+    @Test fun aFailedRestoreSaysSoOnTheScreen() {
+        val stored = ChordEdits(chords = spansOf(loop).mapIndexed { i, s -> if (i == 1) s.copy(label = "E:min", edited = true) else s })
+        val edits = songEdits(EditsLoad.Loaded(stored), clear = { throw IOException("read-only") })
+        showEditing(edits)
+        rule.onNodeWithTag("more").performClick()
+        rule.onNodeWithText("Restore the model's chords").performClick()
+        rule.onNodeWithText("Restore").performClick()
+        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("editMessage")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText(RESTORE_FAILED + "read-only").assertExists()
+        assertTrue("the edits are still there", edits.hasEdits.value)
+    }
+}
+
+/** One segment per span, with the display name and the bars' chord names redone (the engine's rebuild without the engine). */
+private fun fakeRebuild(result: AnalysisResult, spans: List<ChordSpan>): AnalysisResult {
+    val chords = spans.mapIndexed { i, s ->
+        val same = result.chords.firstOrNull { it.label == s.label }
+        (same ?: result.chords.first()).copy(index = i, start = s.start, end = s.end, label = s.label,
+            display = displayName(s.label, shapeKey(result.key.global.tonic, result.key.global.mode, 0).flats), edited = s.edited)
+    }
+    val bars = result.bars.map { bar ->
+        val quarter = (bar.end - bar.start) * 0.25
+        Bar(bar.start, bar.end, chords.filter { minOf(it.end, bar.end) - maxOf(it.start, bar.start) >= quarter }
+            .map { it.display }.fold(emptyList()) { acc, name -> if (acc.lastOrNull() == name) acc else acc + name })
+    }
+    return result.copy(chords = chords, bars = bars)
 }

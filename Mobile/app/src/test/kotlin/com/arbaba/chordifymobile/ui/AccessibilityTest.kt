@@ -10,6 +10,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.arbaba.chordifymobile.data.Analysis
 import com.arbaba.chordifymobile.data.ScreenOrientation
 import com.arbaba.chordifymobile.data.Status
+import com.arbaba.chordifymobile.edit.EditUiState
+import com.arbaba.chordifymobile.edit.spansOf
+import com.arbaba.chordifymobile.ui.analysis.ChordPickerContent
+import com.arbaba.chordifymobile.ui.analysis.ShapeEditorContent
 import com.arbaba.chordifymobile.music.Notation
 import com.arbaba.chordifymobile.playback.PlaybackClock
 import com.arbaba.chordifymobile.quick.QuickChordContent
@@ -54,6 +58,30 @@ class AccessibilityTest {
     @Test fun analysisControlsAreNamedInLandscape() { analysis(LANDSCAPE); rule.assertEveryControlNamed() }
 
     @Test fun analysisControlsAreNamedInPortrait() { analysis(PORTRAIT); rule.assertEveryControlNamed() }
+
+    private fun editing(size: DpSize, selected: Int?) = rule.show(size) {
+        val loop = Fixtures.loop
+        val state = EditUiState(spansOf(loop), emptyMap(), loop, selected, canUndo = true, canRedo = true, dirty = true,
+            looping = false, saveError = "Could not save your changes: disk full")
+        AnalysisContent("Loop", loop, PlaybackClock(loop.source.duration), Notation.LETTERS, 0, AudioFile.PLAYABLE, false,
+            onNotation = {}, onCapo = {}, onPickFile = {}, hasEdits = true, edit = state)
+    }
+
+    @Test fun editingControlsAreNamedInLandscape() { editing(LANDSCAPE, 1); rule.assertEveryControlNamed() }
+
+    @Test fun editingControlsAreNamedInPortrait() { editing(PORTRAIT, 1); rule.assertEveryControlNamed() }
+
+    @Test fun editingWithNothingSelectedIsNamed() { editing(LANDSCAPE, null); rule.assertEveryControlNamed() }
+
+    @Test fun theChordPickerControlsAreNamed() {
+        rule.show(PORTRAIT) { ChordPickerContent("G:maj", listOf("E:min", "C:maj"), Fixtures.loop.key.global, false, {}, {}) }
+        rule.assertEveryControlNamed()
+    }
+
+    @Test fun theShapeEditorControlsAreNamed() {
+        rule.show(PORTRAIT) { ShapeEditorContent("G:maj", listOf(3, 2, 0, 0, 0, 3), listOf(3, 2, 0, 0, 0, 3), 0, {}, {}) }
+        rule.assertEveryControlNamed()
+    }
 
     @Test fun analysisAnnouncesTheChord() { analysis(LANDSCAPE); rule.assertAnnounced() }
 

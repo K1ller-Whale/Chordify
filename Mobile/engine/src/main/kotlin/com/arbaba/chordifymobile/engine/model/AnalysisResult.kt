@@ -2,6 +2,8 @@ package com.arbaba.chordifymobile.engine.model
 
 import com.arbaba.chordifymobile.engine.lm.Prediction
 import com.arbaba.chordifymobile.engine.lm.PriorEntry
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -23,6 +25,7 @@ data class KeySummary(val global: KeyInfo, val segments: List<KeySegment>)
 @Serializable
 data class Alternative(val label: String, val display: String, val p: Double)
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class ChordSegment(
     val index: Int,
@@ -43,6 +46,8 @@ data class ChordSegment(
     val next: List<Prediction> = emptyList(),
     @SerialName("theory_only") val theoryOnly: List<PriorEntry> = emptyList(),
     val surprise: Double? = null,
+    /** True for a chord the user changed; never written while false, so unedited JSON is unchanged. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val edited: Boolean = false,
 )
 
 @Serializable

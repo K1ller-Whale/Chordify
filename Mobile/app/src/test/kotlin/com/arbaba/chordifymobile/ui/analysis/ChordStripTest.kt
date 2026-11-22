@@ -11,11 +11,25 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.down
+import androidx.compose.ui.test.moveBy
+import androidx.compose.ui.test.up
+import com.arbaba.chordifymobile.edit.snapToBeat
 import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.semantics.SemanticsProperties
+import com.arbaba.chordifymobile.engine.model.AnalysisResult
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.test.junit4.AndroidComposeTestRule
 import com.arbaba.chordifymobile.music.Notation
+import com.arbaba.chordifymobile.ui.ChordifyTheme
 import com.arbaba.chordifymobile.ui.Fixtures
+import kotlin.math.roundToInt
 import com.arbaba.chordifymobile.ui.LANDSCAPE
 import com.arbaba.chordifymobile.ui.assertEveryControlNamed
 import com.arbaba.chordifymobile.ui.show
@@ -65,5 +79,198 @@ class ChordStripTest {
     @Test fun controlsAreNamed() {
         showStrip()
         rule.assertEveryControlNamed()
+    }
+
+    private val selects = mutableListOf<Int>()
+    private val moves = mutableListOf<Pair<Int, Double>>()
+    private val pps = PIXELS_PER_SECOND.dp
+    private val loop = Fixtures.loop
+
+    private fun showEditing(selected: Int?, result: AnalysisResult = loop) = rule.show(LANDSCAPE) {
+        Box(Modifier.fillMaxSize()) {
+            ChordStrip(result, time, 0, Notation.LETTERS, null, emptySet(), { seeks += it },
+                       editing = true, selected = selected, onSelect = { selects += it }, onMoveEdge = { e, t -> moves += e to t })
+        }
+    }
+
+    @Test fun editingStripIs110DpTall() {
+        showEditing(null)
+        rule.onNodeWithTag("strip").assertHeightIsEqualTo(110.dp)
+    }
+
+    @Test fun editingTapSelectsInsteadOfSeeking() {
+        showEditing(null)
+        val c = loop.chords[1]
+        rule.onNodeWithTag("strip").performTouchInput {
+            click(Offset(width * PLAYHEAD + ((c.start + c.end) / 2).toFloat() * pps.toPx(), centerY))
+        }
+        assertEquals(listOf(1), selects)
+        assertTrue(seeks.isEmpty())
+    }
+
+    @Test fun draggingTheRightHandleReportsOnceAtTheEnd() {
+        // One beat 3 dp past the drop point, so the drop snaps to it exactly.
+        val c = loop.chords[1]
+        val beat = c.end + 1.0 + 3.0 / PIXELS_PER_SECOND
+        showEditing(1, loop.copy(beats = listOf(c.start, beat, loop.chords[2].end)))
+        rule.onNodeWithTag("strip").performTouchInput {
+            down(Offset(width * PLAYHEAD + c.end.toFloat() * pps.toPx(), centerY))
+            moveBy(Offset(35.dp.toPx(), 0f))
+            moveBy(Offset(35.dp.toPx(), 0f))
+            assertTrue(moves.isEmpty())
+            up()
+        }
+        assertEquals(1, moves.size)
+        assertEquals(2, moves[0].first)
+        assertEquals(beat, moves[0].second, 1e-6)
+        assertTrue(seeks.isEmpty())
+    }
+
+    @Test fun aDropFarFromBeatsIsNotSnapped() {
+        val c = loop.chords[1]
+        showEditing(1, loop.copy(beats = listOf(c.end + 1.0 + 20.0 / PIXELS_PER_SECOND)))
+        rule.onNodeWithTag("strip").performTouchInput {
+            down(Offset(width * PLAYHEAD + c.end.toFloat() * pps.toPx(), centerY))
+            moveBy(Offset(70.dp.toPx(), 0f))
+            up()
+        }
+        assertEquals(c.end + 1.0, moves.single().second, 0.01)
+    }
+
+    @Test fun draggingTheLeftHandleMovesEdgeI() {
+        showEditing(1, loop.copy(beats = emptyList()))
+        val c = loop.chords[1]
+        rule.onNodeWithTag("strip").performTouchInput {
+            down(Offset(width * PLAYHEAD + c.start.toFloat() * pps.toPx(), centerY))
+            moveBy(Offset(-35.dp.toPx(), 0f))
+            up()
+        }
+        assertEquals(1, moves.size)
+        assertEquals(1, moves[0].first)
+        assertEquals(c.start - 0.5, moves[0].second, 0.01)
+    }
+
+    @Test fun theEdgeFollowsTheFingerWhileThePlayheadMoves() {
+        val c = loop.chords[1]
+        showEditing(1, loop.copy(beats = emptyList()))
+        val fingerX = { w: Float -> w * PLAYHEAD + c.end.toFloat() * pps.value }
+        var downAt = 0f
+        rule.onNodeWithTag("strip").performTouchInput {
+            downAt = width * PLAYHEAD + c.end.toFloat() * pps.toPx()
+            down(Offset(downAt, centerY))
+            moveBy(Offset(35.dp.toPx(), 0f))
+        }
+        // Playback carries the strip on by half a second while the finger stays put.
+        rule.runOnIdle { time.value = 0.5 }
+        rule.onNodeWithTag("strip").performTouchInput {
+            moveBy(Offset(1f, 0f))
+            up()
+        }
+        // The finger is 35 dp + 1 px right of the playhead-relative edge position; the strip moved 0.5 s.
+        val density = rule.density.density
+        val expected = c.end + 0.5 + (35f + 1f / density) / PIXELS_PER_SECOND
+        assertEquals(2, moves.single().first)
+        assertEquals(expected, moves.single().second, 0.01)
+    }
+
+    @Test fun aCancelledDragReportsNothing() {
+        val c = loop.chords[1]
+        showEditing(1)
+        rule.onNodeWithTag("strip").performTouchInput {
+            down(Offset(width * PLAYHEAD + c.end.toFloat() * pps.toPx(), centerY))
+            moveBy(Offset(40.dp.toPx(), 0f))
+            cancel()
+        }
+        assertTrue(moves.isEmpty())
+    }
+
+    @Test fun aVerticalSwipeDoesNotSelect() {
+        showEditing(null)
+        rule.onNodeWithTag("strip").performTouchInput {
+            down(center)
+            moveBy(Offset(0f, 60f))
+            up()
+        }
+        assertTrue(selects.isEmpty())
+    }
+
+    @Test fun talkBackCanSelectAChord() {
+        showEditing(null)
+        rule.onNodeWithTag("strip").assertContentDescriptionEquals("Chord strip, double-tap a chord to select it")
+        val actions = rule.onNodeWithTag("strip").fetchSemanticsNode().config
+            .getOrNull(SemanticsActions.CustomActions).orEmpty()
+        val names = actions.map { it.label }
+        assertEquals(names.size, names.toSet().size)
+        val pick = actions.first { it.label.startsWith("Select chord 2") }
+        rule.runOnIdle { assertTrue(pick.action()) }
+        assertEquals(listOf(1), selects)
+    }
+
+    @Test fun aTimeNearABeatSnapsToIt() {
+        val beats = listOf(1.0, 1.5, 2.0)
+        assertEquals(1.5, snapToBeat(1.5 + 5.0 / 70.0, beats, 6.0 / 70.0), 1e-9)
+        assertEquals(1.25, snapToBeat(1.25, beats, 6.0 / 70.0), 1e-9)
+    }
+
+    /** The colour drawn at the middle of the selected chord 1's start handle, in the [dark] or light theme. */
+    private fun handleColour(dark: Boolean): Color {
+        rule.show(LANDSCAPE) {
+            ChordifyTheme(dark = dark) {
+                Box(Modifier.fillMaxSize()) {
+                    ChordStrip(loop, time, 0, Notation.LETTERS, null, emptySet(), {}, editing = true, selected = 1)
+                }
+            }
+        }
+        // captureToImage waits for a frame Robolectric never reports, so the window is drawn into a bitmap here.
+        val window = (rule as AndroidComposeTestRule<*, *>).activity.window.decorView
+        val bitmap = Bitmap.createBitmap(window.width, window.height, Bitmap.Config.ARGB_8888)
+        rule.runOnIdle { window.draw(android.graphics.Canvas(bitmap)) }
+        val strip = rule.onNodeWithTag("strip").fetchSemanticsNode()
+        val u = rule.density.density
+        // The handle is 7 dp wide around the block's left edge (start + 1 dp), and 30 dp tall around the
+        // middle of the 84 dp block that starts 4 dp down.
+        val x = strip.size.width * PLAYHEAD + loop.chords[1].start.toFloat() * PIXELS_PER_SECOND * u + 0.5f * u
+        return Color(bitmap.getPixel((strip.positionInWindow.x + x).roundToInt(), (strip.positionInWindow.y + 46f * u).roundToInt()))
+    }
+
+    @Test fun theSelectionShowsOnPaleBlocksInTheLightTheme() {
+        val colour = handleColour(dark = false)
+        assertTrue("the handle is $colour, too light to see on a pale block", colour.luminance() < 0.2f)
+    }
+
+    @Test fun theSelectionStaysLightInTheDarkTheme() {
+        val colour = handleColour(dark = true)
+        assertTrue("the handle is $colour", colour.luminance() > 0.8f)
+    }
+
+    @Test fun aRebuildThatTakesTheDraggedEdgeAwayDoesNotCrash() {
+        val shown = mutableStateOf(loop)
+        rule.show(LANDSCAPE) {
+            Box(Modifier.fillMaxSize()) {
+                ChordStrip(shown.value, time, 0, Notation.LETTERS, null, emptySet(), {},
+                           editing = true, selected = 2, onMoveEdge = { e, t -> moves += e to t })
+            }
+        }
+        val c = loop.chords[2]
+        rule.onNodeWithTag("strip").performTouchInput {
+            down(Offset(width * PLAYHEAD + c.end.toFloat() * pps.toPx(), centerY))
+            moveBy(Offset(-35.dp.toPx(), 0f))
+        }
+        // A rebuild lands while the finger is down and the last chord, with edge 3, is gone.
+        val three = loop.chords.take(3)
+        rule.runOnIdle { shown.value = loop.copy(chords = three.dropLast(1) + three.last().copy(end = loop.source.duration)) }
+        rule.waitForIdle()
+        rule.onNodeWithTag("strip").performTouchInput {
+            moveBy(Offset(-5.dp.toPx(), 0f))
+            up()
+        }
+        rule.waitForIdle()
+        assertTrue("an edge that is gone is not moved: $moves", moves.isEmpty())
+    }
+
+    @Test fun anEditedChordsNameEndsWithAPencil() {
+        val c = loop.chords[0]
+        assertEquals(c.display, stripName(c, Notation.LETTERS))
+        assertEquals(c.display + " ✎", stripName(c.copy(edited = true), Notation.LETTERS))
     }
 }

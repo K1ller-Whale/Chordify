@@ -74,9 +74,14 @@ class ChordModel internal constructor(val bundle: ChordBundle, model: ByteArray)
         const val INPUT = "features"
         const val BUNDLE = "models/chordnet-chroma/3.0.0"
 
-        /** The bundle the app ships (copied from the repository's models/ into the engine's assets). */
-        fun fromAssets(context: Context, directory: String = BUNDLE): ChordModel {
-            val bundle = ChordBundle.parse(context.assets.open("$directory/bundle.json").use { it.readBytes().decodeToString() })
+        /** The bundle.json of a bundle the app ships, read without its model. */
+        fun bundleFromAssets(context: Context, directory: String = BUNDLE): ChordBundle =
+            ChordBundle.parse(context.assets.open("$directory/bundle.json").use { it.readBytes().decodeToString() })
+
+        /** The bundle the app ships (copied from the repository's models/ into the engine's assets); pass [bundle]
+         *  when its bundle.json is read already. */
+        fun fromAssets(context: Context, directory: String = BUNDLE,
+                       bundle: ChordBundle = bundleFromAssets(context, directory)): ChordModel {
             val model = context.assets.open("$directory/${bundle.modelFile}").use { it.readBytes() }
             return ChordModel(bundle, model)
         }

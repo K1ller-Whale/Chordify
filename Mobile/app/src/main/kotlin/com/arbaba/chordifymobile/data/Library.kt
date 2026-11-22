@@ -5,7 +5,14 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import com.arbaba.chordifymobile.edit.ChordEdits
+import com.arbaba.chordifymobile.edit.EditsLoad
+import com.arbaba.chordifymobile.edit.decodeEdits
+import com.arbaba.chordifymobile.edit.normalise
+import com.arbaba.chordifymobile.edit.encodeEdits
+import com.arbaba.chordifymobile.edit.spansOf
 import com.arbaba.chordifymobile.engine.analysis.AnalysisOptions
+import com.arbaba.chordifymobile.engine.analysis.ChordSpan
 import com.arbaba.chordifymobile.engine.audio.AudioSource
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
 import com.arbaba.chordifymobile.engine.model.parseAnalysisResult
@@ -21,7 +28,11 @@ import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.UUID
 
@@ -40,6 +51,7 @@ class Library(
     private val jobs: JobScheduler,
     private val fingerprint: String,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val rebuild: suspend (AnalysisResult, List<ChordSpan>) -> AnalysisResult = { result, _ -> result },
 ) {
     private val resolver: ContentResolver = context.contentResolver
     private val resultsDir = File(context.filesDir, "results")
@@ -110,12 +122,32 @@ class Library(
             }
             out.toString(Charsets.UTF_8.name())
         }
-        val result = parseExport(text)
+        importAnalysisText(text) { runCatching { displayNameOf(uri).removeSuffix(".json") }.getOrDefault("Imported analysis") }
+    }
+
+    /** Adds the analysis in the export [text] as a completed row; [fallbackName] is asked for its name only when the
+     *  export has no title or filename. Returns the new row's id. */
+    internal suspend fun importAnalysisText(text: String, fallbackName: () -> String): String = withContext(Dispatchers.IO) {
+        val parsed = readExport(text)
+        val result = parsed.result
         val id = newId()
         resultsDir.mkdirs()
-        resultFile(id).writeText(result.toJson())
+        val export = parsed.edits
+        if (export == null) {
+            resultFile(id).writeText(result.toJson())
+        } else {
+            // The export's result is the edited one; the model's own is rebuilt from its chords.
+            val original = rebuild(result.copy(chords = export.originalChords), spansOf(result.copy(chords = export.originalChords)))
+            resultFile(id).writeText(original.toJson())
+            try {
+                writeEdits(id, ChordEdits(chords = spansOf(result), shapes = export.shapes))
+            } catch (error: Exception) {
+                resultFile(id).delete()
+                throw error
+            }
+        }
         val key = result.key.global
-        val name = result.source.title ?: result.source.filename ?: displayNameOf(uri).removeSuffix(".json")
+        val name = result.source.title ?: result.source.filename ?: fallbackName()
         dao.upsert(Analysis(id, name, fileUri = "", ownsFile = false, sha256 = result.source.sha256.orEmpty(),
                             createdAt = clock(), status = Status.COMPLETED, stage = "done", progress = 1.0,
                             modelFingerprint = IMPORTED, duration = result.source.duration,
@@ -150,7 +182,11 @@ class Library(
         jobs.cancel(id)
         dao.delete(id)
         resultFile(id).delete()
+        editsFile(id).delete()
+        damagedEditsFile(id).delete()
         peaksFile(id).delete()
+        File(resultsDir, "$id.edits.json.part").delete()
+        File(resultsDir, "$id.json.part").delete()
         if (row.ownsFile) Uri.parse(row.fileUri).path?.let { File(it).delete() }
     }
 
@@ -175,6 +211,70 @@ class Library(
     }
 
     fun resultFile(id: String): File = File(resultsDir, "$id.json")
+
+    /** The user's chord edits of the analysis (spec §3.1). */
+    fun editsFile(id: String): File = File(resultsDir, "$id.edits.json")
+
+    /** The song's saved edits: none, the edits, or a file that cannot be read. */
+    suspend fun edits(id: String): EditsLoad = withContext(Dispatchers.IO) {
+        val file = editsFile(id)
+        if (!file.exists()) return@withContext EditsLoad.None
+        try {
+            val edits = decodeEdits(file.readText())
+            val duration = resultFile(id).takeIf { it.exists() }?.let { parseAnalysisResult(it.readText()).source.duration }
+                ?: dao.get(id)?.duration
+                ?: return@withContext EditsLoad.Damaged
+            // Spans past the song are clipped and gaps filled with N (spec §4), so rebuild gets a cover.
+            EditsLoad.Loaded(edits.copy(chords = normalise(edits.chords, duration)))
+        } catch (_: Exception) {
+            EditsLoad.Damaged
+        }
+    }
+
+    /** Saves [edits] atomically; throws IOException when it cannot. */
+    suspend fun saveEdits(id: String, edits: ChordEdits) = withContext(Dispatchers.IO) {
+        writeEdits(id, edits)
+    }
+
+    private fun writeEdits(id: String, edits: ChordEdits) {
+        resultsDir.mkdirs()
+        val partial = File(resultsDir, "$id.edits.json.part")
+        try {
+            partial.writeText(encodeEdits(edits))
+            val target = editsFile(id)
+            try {
+                Files.move(partial.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(partial.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+        } catch (error: Exception) {
+            partial.delete()
+            throw if (error is IOException) error else IOException(error.message, error)
+        }
+    }
+
+    /** Where an edits file that could not be read is kept, once [setAsideDamagedEdits] has moved it. */
+    fun damagedEditsFile(id: String): File = File(resultsDir, "$id.edits.damaged.json")
+
+    /** Moves an edits file that could not be read out of the way, so that saving or clearing the song's edits
+     *  destroys nothing the user had; a file set aside earlier is replaced. Does nothing without a file;
+     *  throws IOException when it cannot move it. */
+    suspend fun setAsideDamagedEdits(id: String) = withContext(Dispatchers.IO) {
+        val file = editsFile(id)
+        if (!file.exists()) return@withContext
+        val target = damagedEditsFile(id).toPath()
+        try {
+            Files.move(file.toPath(), target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(file.toPath(), target, StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+
+    /** Deletes the song's edits. */
+    suspend fun clearEdits(id: String) = withContext(Dispatchers.IO) {
+        val file = editsFile(id)
+        if (file.exists() && !file.delete()) throw IOException("Could not delete ${file.name}")
+    }
 
     /** The waveform of the analysis's file (lib/audio.ts waveformPeaks), made the first time it is
      *  asked for and kept next to the result; null when the file cannot be read. */

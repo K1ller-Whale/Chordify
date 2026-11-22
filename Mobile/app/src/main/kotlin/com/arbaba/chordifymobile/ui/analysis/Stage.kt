@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.abs
 import com.arbaba.chordifymobile.engine.model.ChordSegment
 import com.arbaba.chordifymobile.music.Notation
+import com.arbaba.chordifymobile.music.Shape
 import com.arbaba.chordifymobile.music.chordName
 import com.arbaba.chordifymobile.music.guitarShape
 import com.arbaba.chordifymobile.music.isNoChord
@@ -52,7 +53,8 @@ import com.arbaba.chordifymobile.ui.LocalChordifyColors
  *  when even the smallest does not, the whole stage is scaled down to fit, so nothing is cut. */
 @Composable
 fun Stage(chord: ChordSegment, notation: Notation, capo: Int, sounding: String?,
-          onSwipe: (delta: Int) -> Unit, modifier: Modifier = Modifier) {
+          onSwipe: (delta: Int) -> Unit, modifier: Modifier = Modifier,
+          shape: Shape? = guitarShape(chord)) {
     val muted = LocalChordifyColors.current.muted
     val typography = MaterialTheme.typography
     val noChord = isNoChord(chord.label)
@@ -111,7 +113,7 @@ fun Stage(chord: ChordSegment, notation: Notation, capo: Int, sounding: String?,
                     Text(doubt, style = typography.bodySmall, modifier = Modifier.testTag("unsureText"))
                 }
             }
-            if (!noChord) GuitarDiagram(guitarShape(chord), capo, width = diagramWidth)
+            if (!noChord && shape != null) GuitarDiagram(shape, capo, width = diagramWidth)
         } }
     }
 }
