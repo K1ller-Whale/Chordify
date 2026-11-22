@@ -7,7 +7,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
-import java.io.IOException
 
 /**
  * The editing session of one song: the spans and shapes being corrected, an undo/redo history, and a
@@ -16,7 +15,9 @@ import java.io.IOException
  *
  * Operations change the spans at once; [state] is published when the preview for them is rebuilt, and
  * a preview that a later operation has overtaken is dropped. [onFinished] gets the saved edits and the
- * shown analysis after Done (both null when nothing was kept, and after [restore]).
+ * shown analysis after Done (both null when nothing was kept, and after [restore]). [onMessage] gets what
+ * the screen must say when no editing state can show it: a failed [restore], or a session that ended
+ * because its first rebuild failed.
  */
 class EditController(
     private val duration: Double,
@@ -26,6 +27,7 @@ class EditController(
     private val clear: suspend () -> Unit,
     private val scope: CoroutineScope,
     private val onFinished: (ChordEdits?, AnalysisResult?) -> Unit = { _, _ -> },
+    private val onMessage: (String) -> Unit = {},
 ) {
     private val _state = MutableStateFlow<EditUiState?>(null)
 
@@ -131,7 +133,7 @@ class EditController(
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                saveError = SAVE_FAILED + (error.message ?: error.javaClass.simpleName)
+                saveError = SAVE_FAILED + reason(error)
                 _state.value = _state.value?.copy(saveError = saveError)
             } finally {
                 saving = false
@@ -139,14 +141,15 @@ class EditController(
         }
     }
 
-    /** Deletes the saved edits so the model's chords and shapes show again. */
+    /** Deletes the saved edits so the model's chords and shapes show again; if that fails, they stay and [onMessage] says why. */
     fun restore() {
         scope.launch {
             try {
                 clear()
             } catch (error: CancellationException) {
                 throw error
-            } catch (error: IOException) {
+            } catch (error: Exception) {
+                onMessage(RESTORE_FAILED + reason(error))
                 return@launch
             }
             finish()
@@ -196,9 +199,13 @@ class EditController(
                 throw error
             } catch (error: Exception) {
                 if (active && mine == stamp) {
-                    // Keep what is shown; with nothing shown yet, there is no session to keep.
+                    // Keep what is shown; with nothing shown yet, there is no session to keep, and only a
+                    // message can say why editing did not start.
                     val shown = _state.value
-                    if (shown == null) finish() else {
+                    if (shown == null) {
+                        finish()
+                        onMessage(UPDATE_FAILED + reason(error))
+                    } else {
                         good?.let { (edits, undo, redo) ->
                             current = edits
                             undoStack.clear(); undoStack.addAll(undo)
@@ -206,7 +213,7 @@ class EditController(
                             selected = selected?.coerceAtMost(current.chords.lastIndex)
                         }
                         fresh = true
-                        saveError = UPDATE_FAILED + (error.message ?: error.javaClass.simpleName)
+                        saveError = UPDATE_FAILED + reason(error)
                         _state.value = shown.copy(saveError = saveError)
                     }
                 }
@@ -237,6 +244,9 @@ class EditController(
         )
     }
 }
+
+/** What follows "Could not …: " in a message about [error]. */
+internal fun reason(error: Exception): String = error.message ?: error.javaClass.simpleName
 
 /** What the loop of a chord does on a clock tick: seek back to the chord's start, and play on afterwards or not. */
 data class LoopJump(val play: Boolean)

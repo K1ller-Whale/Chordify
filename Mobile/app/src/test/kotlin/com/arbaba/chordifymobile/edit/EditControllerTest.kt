@@ -21,7 +21,9 @@ class EditControllerTest {
     private val saved = mutableListOf<ChordEdits>()
     private var cleared = 0
     private var failSave: Exception? = null
+    private var failClear: Exception? = null
     private var finished: Pair<ChordEdits?, AnalysisResult?>? = null
+    private val messages = mutableListOf<String>()
 
     private var rebuildBy: suspend (List<ChordSpan>) -> AnalysisResult = { fakeRebuild(it) }
     private var saveGate: CompletableDeferred<Unit>? = null
@@ -39,9 +41,10 @@ class EditControllerTest {
         original = original,
         rebuild = { rebuildBy(it) },
         save = { failSave?.let { error -> throw error }; saveGate?.await(); saved += it },
-        clear = { cleared++ },
+        clear = { failClear?.let { error -> throw error }; cleared++ },
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
         onFinished = { edits, shown -> finished = edits to shown },
+        onMessage = { messages += it },
     )
 
     private fun started(): EditController = controller().also { it.start(ChordEdits(chords = spansOf(original))) }
@@ -175,6 +178,14 @@ class EditControllerTest {
         assertEquals(1, cleared)
         assertNull(finished!!.first)
         assertNull(finished!!.second)
+        assertTrue(messages.isEmpty())
+    }
+
+    @Test fun aFailedRestoreSaysSoAndKeepsTheEdits() {
+        failClear = IOException("read-only")
+        controller().restore()
+        assertEquals(listOf(RESTORE_FAILED + "read-only"), messages)
+        assertNull(finished)
     }
 
     @Test fun selectionClampsAfterAMerge() {
@@ -215,6 +226,7 @@ class EditControllerTest {
         rebuildBy = { throw IllegalStateException("no engine") }
         val c = started()
         assertNull(c.state.value)
+        assertEquals(listOf(UPDATE_FAILED + "no engine"), messages)
         c.rename(1, "E:min")
         assertNull(c.state.value)
         c.done()
@@ -230,6 +242,7 @@ class EditControllerTest {
         val s = c.state.value!!
         assertEquals(before.preview, s.preview)
         assertTrue(s.saveError!!.contains("boom"))
+        assertTrue("the session shows its own error", messages.isEmpty())
     }
 
     @Test fun anOvertakenPreviewIsDropped() {

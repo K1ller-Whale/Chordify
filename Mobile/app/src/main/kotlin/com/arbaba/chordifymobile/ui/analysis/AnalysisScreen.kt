@@ -24,6 +24,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,6 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -80,6 +85,8 @@ import com.arbaba.chordifymobile.music.withCapo
 import com.arbaba.chordifymobile.playback.PlaybackClock
 import com.arbaba.chordifymobile.ui.AdaptiveLayout
 import com.arbaba.chordifymobile.ui.stageLabel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 /** The analysis screen (M7 spec §3), opened from the Library: the analysing, failed and cancelled
  *  states, or the completed analysis ([AnalysisContent]). */
@@ -126,6 +133,7 @@ fun AnalysisScreen(id: String, onBack: () -> Unit = {}) {
         editsDamaged = editsDamaged,
         edit = edit,
         editActions = model,
+        messages = model.messages,
     )
 }
 
@@ -179,6 +187,7 @@ fun AnalysisContent(
     editsDamaged: Boolean = false,
     edit: EditUiState? = null,
     editActions: EditActions = NoEditActions,
+    messages: Flow<String> = emptyFlow(),
 ) {
     val preview = edit?.preview
     val result = remember(analysed, capo, preview) { withCapo(preview ?: analysed, capo) }
@@ -188,6 +197,10 @@ fun AnalysisContent(
     val flats = remember(analysed, capo) { shapeKey(analysed.key.global.tonic, analysed.key.global.mode, capo).flats }
     val keyFlats = remember(analysed) { shapeKey(analysed.key.global.tonic, analysed.key.global.mode, 0).flats }
     var dialog by remember { mutableStateOf<EditDialog?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(messages) {
+        messages.collect { snackbar.showSnackbar(it, withDismissAction = true, duration = SnackbarDuration.Long) }
+    }
     val cancelEdit = { if (edit?.dirty == true) dialog = EditDialog.DISCARD else editActions.cancelEditing() }
     BackHandler(enabled = edit != null) { cancelEdit() }
     val suggestion = remember(analysed) { suggestCapo(analysed.chords) }
@@ -294,22 +307,29 @@ fun AnalysisContent(
             editing = edit != null, canUndo = edit?.canUndo == true, canRedo = edit?.canRedo == true, hasEdits = hasEdits,
             onEdit = editActions::startEditing, onUndo = editActions::undo, onRedo = editActions::redo,
             onCancelEdit = { cancelEdit() }, onDone = editActions::done, onRestore = { dialog = EditDialog.RESTORE })
-        AdaptiveLayout(Modifier.weight(1f).fillMaxWidth()) { landscape ->
-            val stageArea = Modifier.onSizeChanged { stageWidthPx = it.width.toFloat() }.testTag("stageArea")
-            if (landscape) {
-                Row(Modifier.fillMaxSize()) {
-                    Column(stageArea.weight(0.6f).fillMaxHeight(), content = stageColumn)
-                    Column(Modifier.weight(0.4f).fillMaxHeight().testTag("panelArea"), content = panelColumn)
-                }
-            } else {
-                BoxWithConstraints(Modifier.fillMaxSize()) {
-                    // the stage takes 40% of the height, the strip comes under it
-                    val stageHeight = maxHeight * 0.4f + STRIP_HEIGHT
-                    Column(Modifier.fillMaxSize()) {
-                        Column(stageArea.fillMaxWidth().height(stageHeight), content = stageColumn)
-                        Column(Modifier.weight(1f).fillMaxWidth().testTag("panelArea"), content = panelColumn)
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            AdaptiveLayout(Modifier.fillMaxSize()) { landscape ->
+                val stageArea = Modifier.onSizeChanged { stageWidthPx = it.width.toFloat() }.testTag("stageArea")
+                if (landscape) {
+                    Row(Modifier.fillMaxSize()) {
+                        Column(stageArea.weight(0.6f).fillMaxHeight(), content = stageColumn)
+                        Column(Modifier.weight(0.4f).fillMaxHeight().testTag("panelArea"), content = panelColumn)
+                    }
+                } else {
+                    BoxWithConstraints(Modifier.fillMaxSize()) {
+                        // the stage takes 40% of the height, the strip comes under it
+                        val stageHeight = maxHeight * 0.4f + STRIP_HEIGHT
+                        Column(Modifier.fillMaxSize()) {
+                            Column(stageArea.fillMaxWidth().height(stageHeight), content = stageColumn)
+                            Column(Modifier.weight(1f).fillMaxWidth().testTag("panelArea"), content = panelColumn)
+                        }
                     }
                 }
+            }
+            // A message that has no editing state to show it in (a failed restore, chords that could not be
+            // rebuilt), over the bottom of the content so the transport stays usable.
+            SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter)) { data ->
+                Snackbar(data, Modifier.testTag("editMessage"))
             }
         }
         TransportBar(result, time, playing, rate, visibleSeconds, onToggle = clock::toggle, onSeek = clock::seek,

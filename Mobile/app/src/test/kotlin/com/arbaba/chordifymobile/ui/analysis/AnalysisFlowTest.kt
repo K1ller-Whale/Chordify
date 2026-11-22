@@ -30,11 +30,13 @@ import com.arbaba.chordifymobile.ui.PORTRAIT
 import com.arbaba.chordifymobile.ui.show
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performScrollTo
 import com.arbaba.chordifymobile.edit.ChordEdits
-import com.arbaba.chordifymobile.edit.EditActions
-import com.arbaba.chordifymobile.edit.EditController
+import com.arbaba.chordifymobile.edit.EditsLoad
+import com.arbaba.chordifymobile.edit.RESTORE_FAILED
+import com.arbaba.chordifymobile.edit.SongEdits
 import com.arbaba.chordifymobile.edit.spansOf
 import com.arbaba.chordifymobile.engine.analysis.ChordSpan
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
@@ -42,6 +44,8 @@ import com.arbaba.chordifymobile.engine.model.Bar
 import com.arbaba.chordifymobile.engine.vocab.displayName
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.runBlocking
+import java.io.IOException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -156,51 +160,36 @@ class AnalysisFlowTest {
         assertTrue("seek bar is $width wide", width >= 120.dp)
     }
 
-    // -- chord editing, end to end with a real EditController and a fake rebuild ------------------
+    // -- chord editing, end to end with the view model's own SongEdits and a fake rebuild -----------
 
-    /** What AnalysisViewModel holds, with the engine's rebuild replaced by [fakeRebuild]. */
-    private class EditHarness(val original: AnalysisResult) {
-        val shown = mutableStateOf(original)
-        val hasEdits = mutableStateOf(false)
-        val saved = mutableListOf<ChordEdits>()
-        val controller = EditController(
-            duration = original.source.duration, original = original,
-            rebuild = { spans -> fakeRebuild(original, spans) },
-            save = { saved += it }, clear = {},
-            scope = CoroutineScope(Dispatchers.Unconfined),
-            onFinished = { edits, result -> hasEdits.value = edits != null; shown.value = result ?: original },
-        )
-        val actions = object : EditActions {
-            override fun startEditing() = controller.start(ChordEdits(chords = spansOf(original)))
-            override fun cancelEditing() = controller.cancel()
-            override fun done() = controller.done()
-            override fun restore() = controller.restore()
-            override fun select(index: Int?) = controller.select(index)
-            override fun moveEdge(edge: Int, time: Double) = controller.moveEdge(edge, time)
-            override fun setStart(index: Int, time: Double) = controller.setStart(index, time)
-            override fun setEnd(index: Int, time: Double) = controller.setEnd(index, time)
-            override fun split(index: Int, time: Double) = controller.split(index, time)
-            override fun mergeWithNext(index: Int) = controller.mergeWithNext(index)
-            override fun rename(index: Int, soundingLabel: String) = controller.rename(index, soundingLabel)
-            override fun setShape(shapeLabel: String, shape: List<Int>?) = controller.setShape(shapeLabel, shape)
-            override fun undo() = controller.undo()
-            override fun redo() = controller.redo()
-            override fun toggleLoop() = controller.toggleLoop()
-            override suspend fun suggestions(index: Int): List<String> = emptyList()
-        }
+    private val saved = mutableListOf<ChordEdits>()
+
+    /** What AnalysisViewModel holds: the same SongEdits, with the library and the engine replaced by fakes. */
+    private fun songEdits(stored: EditsLoad = EditsLoad.None, clear: suspend () -> Unit = {}) = SongEdits(
+        scope = CoroutineScope(Dispatchers.Unconfined),
+        rebuild = { result, spans -> fakeRebuild(result, spans) },
+        load = { stored }, save = { saved += it }, clear = clear, setAside = {},
+        next = { _, _ -> emptyList() },
+    ).also { runBlocking { it.open(loop) } }
+
+    /** The screen as AnalysisScreen shows it from the view model. */
+    private fun showEditing(edits: SongEdits) = rule.show(LANDSCAPE) {
+        val shown by edits.shown.collectAsState()
+        val edit by edits.edit.collectAsState()
+        val hasEdits by edits.hasEdits.collectAsState()
+        val shapes by edits.savedShapes.collectAsState()
+        val damaged by edits.damaged.collectAsState()
+        AnalysisContent("Loop", shown!!, clock, Notation.LETTERS, 0, AudioFile.PLAYABLE, false,
+            onNotation = {}, onCapo = {}, onPickFile = {}, shapes = shapes, hasEdits = hasEdits,
+            editsDamaged = damaged, edit = edit, editActions = edits, messages = edits.messages)
     }
 
     @Test fun editingAChordEndToEnd() {
-        val harness = EditHarness(loop)
-        rule.show(LANDSCAPE) {
-            val edit = harness.controller.state.collectAsState().value
-            AnalysisContent("Loop", harness.shown.value, clock, Notation.LETTERS, 0, AudioFile.PLAYABLE, false,
-                onNotation = {}, onCapo = {}, onPickFile = {},
-                hasEdits = harness.hasEdits.value, edit = edit, editActions = harness.actions)
-        }
+        val edits = songEdits()
+        showEditing(edits)
         val g = loop.chords[1]
         val middle = (g.start + g.end) / 2
-        fun spans() = harness.controller.state.value!!.spans
+        fun spans() = edits.edit.value!!.spans
 
         // enter editing and select chord 1 with a tap on its block
         rule.runOnIdle { clock.seek(middle) }
@@ -209,7 +198,7 @@ class AnalysisFlowTest {
         rule.onNodeWithTag("editHint").assertExists()
         rule.onNodeWithTag("strip").performTouchInput { click(Offset(width * PLAYHEAD, centerY)) }
         rule.waitForIdle()
-        assertEquals(1, harness.controller.state.value!!.selected)
+        assertEquals(1, edits.edit.value!!.selected)
         rule.onNodeWithTag("editPanel").assertExists()
         nowName().assertTextEquals("G")
 
@@ -224,7 +213,7 @@ class AnalysisFlowTest {
         rule.onNodeWithTag("chordPicker").assertDoesNotExist()
         nowName().assertTextEquals("Em")
         assertEquals("E:min", spans()[1].label)
-        assertEquals("Em ✎", stripName(harness.controller.state.value!!.preview.chords[1], Notation.LETTERS))
+        assertEquals("Em ✎", stripName(edits.edit.value!!.preview.chords[1], Notation.LETTERS))
 
         // drag the end of chord 1 earlier
         val end = spans()[1].end
@@ -249,15 +238,39 @@ class AnalysisFlowTest {
         // Done saves, leaves editing, and the lead sheet marks the chord
         rule.onNodeWithTag("done").performClick()
         rule.waitForIdle()
-        assertEquals(1, harness.saved.size)
-        assertEquals("E:min", harness.saved[0].chords[1].label)
-        assertEquals(null, harness.controller.state.value)
+        assertEquals(1, saved.size)
+        assertEquals("E:min", saved[0].chords[1].label)
+        assertEquals(null, edits.edit.value)
         rule.onNodeWithTag("edit").assertExists()
-        assertEquals("Em", harness.shown.value.chords[1].display)
+        assertEquals("Em", edits.shown.value!!.chords[1].display)
         rule.onNodeWithText(PanelTab.SHEET.label).performClick()
         rule.waitForIdle()
         val marked = rule.onAllNodes(hasText("Em ✎", substring = true)).fetchSemanticsNodes()
         assertTrue("the lead sheet marks Em", marked.isNotEmpty())
+    }
+
+    @Test fun editingStartsFromTheSavedEdits() {
+        val stored = ChordEdits(chords = spansOf(loop).mapIndexed { i, s -> if (i == 1) s.copy(label = "E:min", edited = true) else s })
+        val edits = songEdits(EditsLoad.Loaded(stored))
+        showEditing(edits)
+        rule.onNodeWithTag("edit").performClick()
+        rule.waitForIdle()
+        assertEquals(stored.chords, edits.edit.value!!.spans)
+        rule.onNodeWithTag("done").performClick()
+        rule.waitForIdle()
+        assertEquals(listOf(stored), saved)
+    }
+
+    @Test fun aFailedRestoreSaysSoOnTheScreen() {
+        val stored = ChordEdits(chords = spansOf(loop).mapIndexed { i, s -> if (i == 1) s.copy(label = "E:min", edited = true) else s })
+        val edits = songEdits(EditsLoad.Loaded(stored), clear = { throw IOException("read-only") })
+        showEditing(edits)
+        rule.onNodeWithTag("more").performClick()
+        rule.onNodeWithText("Restore the model's chords").performClick()
+        rule.onNodeWithText("Restore").performClick()
+        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("editMessage")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithText(RESTORE_FAILED + "read-only").assertExists()
+        assertTrue("the edits are still there", edits.hasEdits.value)
     }
 }
 

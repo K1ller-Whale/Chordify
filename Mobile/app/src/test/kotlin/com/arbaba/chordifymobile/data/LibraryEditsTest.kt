@@ -137,6 +137,32 @@ class LibraryEditsTest {
         assertTrue("clearEdits threw $error", error is java.io.IOException)
     }
 
+    @Test fun damagedEditsAreSetAsideNotDeleted() = runBlocking {
+        val id = song()
+        library.editsFile(id).writeText("{ not json")
+        library.setAsideDamagedEdits(id)
+        assertFalse(library.editsFile(id).exists())
+        assertEquals("{ not json", library.damagedEditsFile(id).readText())
+        assertEquals(EditsLoad.None, library.edits(id))
+        library.editsFile(id).writeText("{ again")
+        library.setAsideDamagedEdits(id) // a later damaged file takes the place of the earlier one
+        assertEquals("{ again", library.damagedEditsFile(id).readText())
+    }
+
+    @Test fun settingAsideWithoutAFileDoesNothing() = runBlocking {
+        val id = song()
+        library.setAsideDamagedEdits(id)
+        assertFalse(library.damagedEditsFile(id).exists())
+        assertFalse(library.editsFile(id).exists())
+    }
+
+    @Test fun deleteRemovesTheSetAsideEditsToo() = runBlocking {
+        val id = song()
+        library.damagedEditsFile(id).writeText("{ not json")
+        library.delete(id)
+        assertFalse(library.damagedEditsFile(id).exists())
+    }
+
     @Test fun deleteRemovesTheEditsToo() = runBlocking {
         val id = library.importAnalysisText(Fixtures.loop.toJson()) { "x" }
         library.saveEdits(id, edits())

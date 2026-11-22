@@ -8,9 +8,13 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.performScrollTo
+import com.arbaba.chordifymobile.edit.RESTORE_FAILED
+import com.arbaba.chordifymobile.ui.assertEveryControlNamed
+import kotlinx.coroutines.flow.MutableSharedFlow
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -292,6 +296,20 @@ class AnalysisScreenTest {
         rule.onNodeWithTag("type:minor").performScrollTo().performClick()
         rule.onNodeWithTag("pickerUse").performClick()
         rule.runOnIdle { assertEquals("rename 1 C#:min", actions.calls.last()) }
+    }
+
+    @Test fun aMessageShowsOnceInASnackbar() {
+        val messages = MutableSharedFlow<String>(extraBufferCapacity = 1)
+        rule.show(LANDSCAPE) {
+            AnalysisContent("Loop", loop, clock, Notation.LETTERS, 0, AudioFile.PLAYABLE, false,
+                onNotation = {}, onCapo = {}, onPickFile = {}, messages = messages)
+        }
+        rule.onNodeWithTag("editMessage").assertDoesNotExist()
+        rule.runOnIdle { messages.tryEmit(RESTORE_FAILED + "read-only") }
+        rule.waitUntil(5_000) { rule.onAllNodes(hasTestTag("editMessage")).fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("editMessage").assertIsDisplayed()
+        rule.onNodeWithText(RESTORE_FAILED + "read-only").assertExists()
+        rule.assertEveryControlNamed()
     }
 
     @Test fun theStageShowsTheSelectedChordNotThePlayheadChord() {

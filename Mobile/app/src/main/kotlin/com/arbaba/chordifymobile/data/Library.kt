@@ -183,6 +183,7 @@ class Library(
         dao.delete(id)
         resultFile(id).delete()
         editsFile(id).delete()
+        damagedEditsFile(id).delete()
         peaksFile(id).delete()
         File(resultsDir, "$id.edits.json.part").delete()
         File(resultsDir, "$id.json.part").delete()
@@ -249,6 +250,23 @@ class Library(
         } catch (error: Exception) {
             partial.delete()
             throw if (error is IOException) error else IOException(error.message, error)
+        }
+    }
+
+    /** Where an edits file that could not be read is kept, once [setAsideDamagedEdits] has moved it. */
+    fun damagedEditsFile(id: String): File = File(resultsDir, "$id.edits.damaged.json")
+
+    /** Moves an edits file that could not be read out of the way, so that saving or clearing the song's edits
+     *  destroys nothing the user had; a file set aside earlier is replaced. Does nothing without a file;
+     *  throws IOException when it cannot move it. */
+    suspend fun setAsideDamagedEdits(id: String) = withContext(Dispatchers.IO) {
+        val file = editsFile(id)
+        if (!file.exists()) return@withContext
+        val target = damagedEditsFile(id).toPath()
+        try {
+            Files.move(file.toPath(), target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(file.toPath(), target, StandardCopyOption.REPLACE_EXISTING)
         }
     }
 
