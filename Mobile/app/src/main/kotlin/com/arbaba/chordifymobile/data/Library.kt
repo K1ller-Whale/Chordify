@@ -7,6 +7,9 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import com.arbaba.chordifymobile.edit.ChordEdits
 import com.arbaba.chordifymobile.edit.EditsLoad
+import com.arbaba.chordifymobile.edit.decodeEdits
+import com.arbaba.chordifymobile.edit.encodeEdits
+import com.arbaba.chordifymobile.edit.spansOf
 import com.arbaba.chordifymobile.engine.analysis.AnalysisOptions
 import com.arbaba.chordifymobile.engine.analysis.ChordSpan
 import com.arbaba.chordifymobile.engine.audio.AudioSource
@@ -24,7 +27,11 @@ import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
+import java.io.IOException
 import java.io.InputStream
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.util.UUID
 
@@ -120,10 +127,24 @@ class Library(
     /** Adds the analysis in the export [text] as a completed row; [fallbackName] is asked for its name only when the
      *  export has no title or filename. Returns the new row's id. */
     internal suspend fun importAnalysisText(text: String, fallbackName: () -> String): String = withContext(Dispatchers.IO) {
-        val result = parseExport(text)
+        val parsed = readExport(text)
+        val result = parsed.result
         val id = newId()
         resultsDir.mkdirs()
-        resultFile(id).writeText(result.toJson())
+        val export = parsed.edits
+        if (export == null) {
+            resultFile(id).writeText(result.toJson())
+        } else {
+            // The export's result is the edited one; the model's own is rebuilt from its chords.
+            val original = rebuild(result.copy(chords = export.originalChords), spansOf(result.copy(chords = export.originalChords)))
+            resultFile(id).writeText(original.toJson())
+            try {
+                writeEdits(id, ChordEdits(chords = spansOf(result), shapes = export.shapes))
+            } catch (error: Exception) {
+                resultFile(id).delete()
+                throw error
+            }
+        }
         val key = result.key.global
         val name = result.source.title ?: result.source.filename ?: fallbackName()
         dao.upsert(Analysis(id, name, fileUri = "", ownsFile = false, sha256 = result.source.sha256.orEmpty(),
@@ -191,13 +212,43 @@ class Library(
     fun editsFile(id: String): File = File(resultsDir, "$id.edits.json")
 
     /** The song's saved edits: none, the edits, or a file that cannot be read. */
-    suspend fun edits(id: String): EditsLoad = EditsLoad.None // S1
+    suspend fun edits(id: String): EditsLoad = withContext(Dispatchers.IO) {
+        val file = editsFile(id)
+        if (!file.exists()) return@withContext EditsLoad.None
+        try {
+            EditsLoad.Loaded(decodeEdits(file.readText()))
+        } catch (_: Exception) {
+            EditsLoad.Damaged
+        }
+    }
 
     /** Saves [edits] atomically; throws IOException when it cannot. */
-    suspend fun saveEdits(id: String, edits: ChordEdits) {} // S1
+    suspend fun saveEdits(id: String, edits: ChordEdits) = withContext(Dispatchers.IO) {
+        writeEdits(id, edits)
+    }
+
+    private fun writeEdits(id: String, edits: ChordEdits) {
+        resultsDir.mkdirs()
+        val partial = File(resultsDir, "$id.edits.json.part")
+        try {
+            partial.writeText(encodeEdits(edits))
+            val target = editsFile(id)
+            try {
+                Files.move(partial.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
+            } catch (_: AtomicMoveNotSupportedException) {
+                Files.move(partial.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
+        } catch (error: Exception) {
+            partial.delete()
+            throw if (error is IOException) error else IOException(error.message, error)
+        }
+    }
 
     /** Deletes the song's edits. */
-    suspend fun clearEdits(id: String) {} // S1
+    suspend fun clearEdits(id: String) = withContext(Dispatchers.IO) {
+        editsFile(id).delete()
+        Unit
+    }
 
     /** The waveform of the analysis's file (lib/audio.ts waveformPeaks), made the first time it is
      *  asked for and kept next to the result; null when the file cannot be read. */
