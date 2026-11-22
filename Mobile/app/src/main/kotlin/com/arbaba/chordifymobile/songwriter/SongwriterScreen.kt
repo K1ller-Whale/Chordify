@@ -130,7 +130,7 @@ class SongwriterViewModel(application: Application) : AndroidViewModel(applicati
     }
 }
 
-/** The Songwriter tab. */
+/** The Songwriter screen (M7 spec §4.4), opened from the Library. */
 @Composable
 fun SongwriterScreen(onBack: () -> Unit = {}, model: SongwriterViewModel = viewModel()) {
     val chords by model.chords.collectAsStateWithLifecycle()

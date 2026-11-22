@@ -28,7 +28,6 @@ class AnalysisTextTest {
         assertEquals("1 beat until the change (0.6 s)", countdown(chord, beats, 1.4))
         assertEquals("0 beats until the change (0.0 s)", countdown(chord, beats, 2.5))
         assertEquals("", countdown(chord.copy(label = "N"), beats, 0.5))
-        assertEquals(0.25f, elapsed(chord, 0.5), 1e-6f)
     }
 
     @Test

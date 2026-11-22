@@ -31,15 +31,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
-/** A section heading: the text upper-cased, labelMedium, LocalChordifyColors.current.muted (what CardTitle did). */
+/** A section heading: the text upper-cased, labelMedium, LocalChordifyColors.current.muted. */
 @Composable
 fun SectionTitle(text: String, modifier: Modifier = Modifier) {
     Text(text.uppercase(), modifier, style = MaterialTheme.typography.labelMedium, color = LocalChordifyColors.current.muted)
 }
 
-/** A plain top bar, 48 dp tall, surface colour, bottom divider: an optional Back icon button
- *  (Icons.AutoMirrored.Filled.ArrowBack, contentDescription "Back", testTag "back"), the title
- *  (titleMedium, bold, one line, ellipsised), a flexible gap, then [actions]. testTag "topBar". */
+/** A plain top bar in the surface colour: a 48 dp row, then a 1 dp outlineVariant divider (49 dp
+ *  in all). The row holds an optional Back icon button (Icons.AutoMirrored.Filled.ArrowBack,
+ *  contentDescription "Back", testTag "back"), the title (titleMedium, bold, one line,
+ *  ellipsised), a flexible gap, then [actions]. testTag "topBar". */
 @Composable
 fun ScreenTopBar(title: String, onBack: (() -> Unit)? = null, modifier: Modifier = Modifier,
                  actions: @Composable RowScope.() -> Unit = {}) {
