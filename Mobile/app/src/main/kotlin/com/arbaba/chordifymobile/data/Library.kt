@@ -254,8 +254,8 @@ class Library(
 
     /** Deletes the song's edits. */
     suspend fun clearEdits(id: String) = withContext(Dispatchers.IO) {
-        editsFile(id).delete()
-        Unit
+        val file = editsFile(id)
+        if (file.exists() && !file.delete()) throw IOException("Could not delete ${file.name}")
     }
 
     /** The waveform of the analysis's file (lib/audio.ts waveformPeaks), made the first time it is
