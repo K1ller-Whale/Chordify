@@ -217,6 +217,9 @@ class EditControllerTest {
         assertNull(c.state.value)
         c.rename(1, "E:min")
         assertNull(c.state.value)
+        c.done()
+        assertEquals(0, cleared)
+        assertTrue(saved.isEmpty())
     }
 
     @Test fun aRebuildThatThrowsOnAnOpKeepsTheLastStateWithAnError() {
@@ -276,5 +279,45 @@ class EditControllerTest {
         assertNull(c.state.value)
         assertEquals(1, saved.size)
         assertEquals(original.chords[2].label, saved[0].chords[2].label)
+    }
+
+    @Test fun afterAFailedOpUndoAndTheNextOpActOnTheShownSpans() {
+        val c = started()
+        c.rename(0, "D:maj")
+        val shown = c.state.value!!.spans
+        rebuildBy = { throw IllegalStateException("boom") }
+        c.rename(1, "E:min")
+        assertEquals(shown, c.state.value!!.spans)
+        rebuildBy = { fakeRebuild(it) }
+        c.rename(2, "A:maj")
+        val s = c.state.value!!
+        assertEquals(shown[1].label, s.spans[1].label)
+        assertEquals("A:maj", s.spans[2].label)
+        c.undo()
+        assertEquals(shown, c.state.value!!.spans)
+        c.undo()
+        assertEquals(spansOf(original), c.state.value!!.spans)
+        assertFalse(c.state.value!!.canUndo)
+    }
+
+    @Test fun pausedPastTheChordDoesNotPlay() {
+        assertEquals(LoopJump(false), loopJump(5.0, running = false, wasRunning = false, start = 1.0, end = 2.0))
+    }
+
+    @Test fun runningPastTheEndSeeksAndPlays() {
+        assertEquals(LoopJump(true), loopJump(1.99, running = true, wasRunning = true, start = 1.0, end = 2.0))
+    }
+
+    @Test fun theEndOfSongPauseAfterRunningStillLoops() {
+        assertEquals(LoopJump(true), loopJump(2.0, running = false, wasRunning = true, start = 1.0, end = 2.0))
+    }
+
+    @Test fun oneMillisecondBeforeTheStartIsLeftAlone() {
+        assertNull(loopJump(0.999, running = true, wasRunning = true, start = 1.0, end = 2.0))
+        assertNull(loopJump(1.5, running = true, wasRunning = true, start = 1.0, end = 2.0))
+    }
+
+    @Test fun aVeryShortChordDoesNotTriggerAtItsStart() {
+        assertNull(loopJump(1.0, running = true, wasRunning = true, start = 1.0, end = 1.06))
     }
 }

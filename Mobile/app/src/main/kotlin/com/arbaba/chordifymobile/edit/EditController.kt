@@ -9,8 +9,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.io.IOException
 
-private const val PREVIEW_FAILED = "Could not update the chords: "
-
 /**
  * The editing session of one song: the spans and shapes being corrected, an undo/redo history, and a
  * preview of the analysis rebuilt after every operation. It has no Android or engine dependencies:
@@ -47,6 +45,7 @@ class EditController(
     private var preview: AnalysisResult? = null
     private var fresh = false
     private var stamp = 0
+    private var good: Triple<ChordEdits, List<ChordEdits>, List<ChordEdits>>? = null
 
     /** Begins editing from [from] (the saved edits, or the model's chords as spans). */
     fun start(from: ChordEdits) {
@@ -59,6 +58,7 @@ class EditController(
         looping = false
         saveError = null
         preview = null
+        good = null
         refresh()
     }
 
@@ -126,15 +126,15 @@ class EditController(
                 val kept = edits.chords.any { it.edited } || edits.shapes.isNotEmpty()
                 val shown = if (kept) (fromPreview ?: rebuild(edits.chords)).also { save(edits) } else null
                 if (!kept) clear()
-                saving = false
                 finish()
                 onFinished(if (kept) edits else null, shown)
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
-                saving = false
                 saveError = SAVE_FAILED + (error.message ?: error.javaClass.simpleName)
                 _state.value = _state.value?.copy(saveError = saveError)
+            } finally {
+                saving = false
             }
         }
     }
@@ -164,6 +164,7 @@ class EditController(
         looping = false
         saveError = null
         preview = null
+        good = null
         fresh = false
         _state.value = null
     }
@@ -198,7 +199,14 @@ class EditController(
                     // Keep what is shown; with nothing shown yet, there is no session to keep.
                     val shown = _state.value
                     if (shown == null) finish() else {
-                        saveError = PREVIEW_FAILED + (error.message ?: error.javaClass.simpleName)
+                        good?.let { (edits, undo, redo) ->
+                            current = edits
+                            undoStack.clear(); undoStack.addAll(undo)
+                            redoStack.clear(); redoStack.addAll(redo)
+                            selected = selected?.coerceAtMost(current.chords.lastIndex)
+                        }
+                        fresh = true
+                        saveError = UPDATE_FAILED + (error.message ?: error.javaClass.simpleName)
                         _state.value = shown.copy(saveError = saveError)
                     }
                 }
@@ -207,6 +215,7 @@ class EditController(
             if (active && mine == stamp) {
                 preview = built
                 fresh = true
+                good = Triple(current, undoStack.toList(), redoStack.toList())
                 publish()
             }
         }
@@ -227,4 +236,17 @@ class EditController(
             saveError = saveError,
         )
     }
+}
+
+/** What the loop of a chord does on a clock tick: seek back to the chord's start, and play on afterwards or not. */
+data class LoopJump(val play: Boolean)
+
+/**
+ * The loop step for a tick at [time] of the chord [start]..[end]: null to leave playback alone, else a jump
+ * back to [start]. It plays on only if the clock [running] now or [wasRunning] at the previous tick, so a
+ * paused clock is never started; the clock's own pause at the end of the song follows a running tick.
+ */
+fun loopJump(time: Double, running: Boolean, wasRunning: Boolean, start: Double, end: Double, margin: Double = 0.05): LoopJump? {
+    val trigger = maxOf(end - margin, (start + end) / 2)
+    return if (time >= trigger || time < start - 0.02) LoopJump(running || wasRunning) else null
 }

@@ -12,6 +12,7 @@ import com.arbaba.chordifymobile.edit.ChordEdits
 import com.arbaba.chordifymobile.edit.EditActions
 import com.arbaba.chordifymobile.edit.EditController
 import com.arbaba.chordifymobile.edit.EditsLoad
+import com.arbaba.chordifymobile.edit.loopJump
 import com.arbaba.chordifymobile.edit.rebuildWith
 import com.arbaba.chordifymobile.edit.spansOf
 import com.arbaba.chordifymobile.edit.EditUiState
@@ -30,14 +31,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Whether the analysed audio can be played: still being checked, playable, or gone. */
-/** How close to a looped chord's end counts as its end, in seconds. */
-private const val LOOP_MARGIN = 0.05
-
 enum class AudioFile { CHECKING, PLAYABLE, MISSING }
 
 class AnalysisViewModel(application: Application, private val id: String) : AndroidViewModel(application), EditActions {
@@ -139,12 +138,13 @@ class AnalysisViewModel(application: Application, private val id: String) : Andr
         edit.collectLatest { state ->
             val span = state?.takeIf { it.looping }?.selected?.let { state.spans.getOrNull(it) } ?: return@collectLatest
             val playing = clock ?: return@collectLatest
-            playing.time.collect { time ->
-                if (time >= span.end - LOOP_MARGIN || time < span.start) {
-                    val wasPlaying = playing.playing.value
+            var wasRunning = playing.playing.value
+            combine(playing.time, playing.playing, ::Pair).collect { (time, running) ->
+                loopJump(time, running, wasRunning, span.start, span.end)?.let {
                     playing.seek(span.start)
-                    if (wasPlaying || time >= span.end - LOOP_MARGIN) playing.play()
+                    if (it.play) playing.play()
                 }
+                wasRunning = running
             }
         }
     }

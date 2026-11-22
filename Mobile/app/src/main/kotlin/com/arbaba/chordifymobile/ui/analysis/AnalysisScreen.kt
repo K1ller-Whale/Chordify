@@ -66,7 +66,6 @@ import com.arbaba.chordifymobile.edit.EditActions
 import com.arbaba.chordifymobile.edit.EditUiState
 import com.arbaba.chordifymobile.edit.NoEditActions
 import com.arbaba.chordifymobile.edit.RESTORE_CONFIRM
-import com.arbaba.chordifymobile.edit.SAVE_FAILED
 import com.arbaba.chordifymobile.edit.shapeLabelOf
 import com.arbaba.chordifymobile.edit.soundingLabel
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
@@ -249,7 +248,7 @@ fun AnalysisContent(
     // Material's 16 dp) so that all five labels fit in the 40% of a landscape phone.
     val editColumn: @Composable ColumnScope.() -> Unit = {
         edit?.saveError?.let {
-            Text(SAVE_FAILED + it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(8.dp).testTag("saveError"))
         }
         val picked = selected
