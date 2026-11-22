@@ -9,6 +9,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
@@ -32,6 +33,12 @@ import com.arbaba.chordifymobile.edit.SAVE_FAILED
 import com.arbaba.chordifymobile.edit.shapeLabelOf
 import com.arbaba.chordifymobile.edit.soundingLabel
 import com.arbaba.chordifymobile.edit.spansOf
+import com.arbaba.chordifymobile.engine.model.KeyInfo
+import com.arbaba.chordifymobile.music.guitarShape
+import com.arbaba.chordifymobile.music.shapeKey
+import com.arbaba.chordifymobile.music.withCapo
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import com.arbaba.chordifymobile.music.Notation
 import com.arbaba.chordifymobile.playback.PlaybackClock
 import com.arbaba.chordifymobile.ui.Fixtures
@@ -145,8 +152,9 @@ class AnalysisScreenTest {
     }
 
     /** An [EditActions] that records the calls the screen makes. */
-    private class Recorder : EditActions {
+    internal class Recorder : EditActions {
         val calls = mutableListOf<String>()
+        var suggested: List<String> = emptyList()
         override fun startEditing() { calls += "start" }
         override fun cancelEditing() { calls += "cancel" }
         override fun done() { calls += "done" }
@@ -162,7 +170,7 @@ class AnalysisScreenTest {
         override fun undo() { calls += "undo" }
         override fun redo() { calls += "redo" }
         override fun toggleLoop() { calls += "loop" }
-        override suspend fun suggestions(index: Int): List<String> = emptyList()
+        override suspend fun suggestions(index: Int): List<String> = suggested
     }
 
     private fun editState(selected: Int? = null, dirty: Boolean = false, saveError: String? = null) =
@@ -263,5 +271,99 @@ class AnalysisScreenTest {
         assertEquals("G:maj", shapeLabelOf("A:maj", 2, false))
         assertEquals("N", pickToRename("N", 2, false))
         assertEquals("C:maj", pickToRename("C:maj", 0, false))
+    }
+
+    @Test fun theStageShowsTheSelectedChordNotThePlayheadChord() {
+        showEditing(Recorder(), editState(selected = 2)) // the clock is at chord 0 (C), chord 2 is Am
+        rule.onNodeWithTag("nowName", useUnmergedTree = true).assertTextEquals(loop.chords[2].display)
+    }
+
+    // The dialog host, with the real dialogs replaced by slots that keep what they were given.
+    private class Slots {
+        var current: String? = null
+        var suggestions: List<String>? = null
+        var onPick: ((String) -> Unit)? = null
+        var shape: List<Int>? = null
+        var defaultShape: List<Int>? = null
+        var shapeLabel: String? = null
+        var onSave: ((List<Int>?) -> Unit)? = null
+    }
+
+    private fun showDialogs(which: EditDialog, actions: Recorder, slots: Slots, saved: Map<String, List<Int>> = emptyMap()) {
+        val capo = 2
+        val shownResult = withCapo(loop, capo)
+        val flats = shapeKey(loop.key.global.tonic, loop.key.global.mode, capo).flats
+        rule.show {
+            EditDialogs(which, {}, 1, shownResult, capo, flats, saved, loop, actions,
+                picker = { current, suggestions, _, _, onPick, _ ->
+                    slots.current = current; slots.suggestions = suggestions; slots.onPick = onPick
+                },
+                shapeEditor = { label, shape, default, _, onSave, _ ->
+                    slots.shapeLabel = label; slots.shape = shape; slots.defaultShape = default; slots.onSave = onSave
+                })
+        }
+    }
+
+    @Test fun thePickerShowsShapesAndRenamesWithTheSoundingLabel() {
+        val actions = Recorder().apply { suggested = listOf("A:maj", "E:min") } // sounding labels
+        val slots = Slots()
+        showDialogs(EditDialog.PICKER, actions, slots)
+        rule.waitForIdle()
+        assertEquals(withCapo(loop, 2).chords[1].label, slots.current)
+        assertEquals(listOf("G:maj", "D:min"), slots.suggestions) // two semitones lower, as shapes
+        rule.runOnIdle { slots.onPick!!("G:maj") }
+        rule.runOnIdle { slots.onPick!!("C:maj/3") }
+        assertEquals(listOf("rename 1 A:maj", "rename 1 D:maj/3"), actions.calls)
+    }
+
+    @Test fun theShapeEditorGetsTheShownChordAndSavesUnderItsLabel() {
+        val actions = Recorder()
+        val slots = Slots()
+        val label = withCapo(loop, 2).chords[1].label
+        showDialogs(EditDialog.SHAPE, actions, slots, saved = mapOf(label to listOf(3, 2, 0, 0, 0, 3)))
+        assertEquals(label, slots.shapeLabel)
+        assertEquals(listOf(3, 2, 0, 0, 0, 3), slots.shape)
+        assertEquals(guitarShape(withCapo(loop, 2).chords[1]), slots.defaultShape)
+        rule.runOnIdle { slots.onSave!!(listOf(1, 1, 1, 1, 1, 1)) }
+        rule.runOnIdle { slots.onSave!!(null) }
+        assertEquals(listOf("setShape $label", "setShape $label"), actions.calls)
+    }
+}
+
+@RunWith(AndroidJUnit4::class)
+class AnalysisBackTest {
+    @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
+    private val loop = Fixtures.loop
+    private val clock = PlaybackClock(loop.source.duration)
+    private var backs = 0
+
+    private fun show(actions: AnalysisScreenTest.Recorder, editing: Boolean, dirty: Boolean) = rule.show(LANDSCAPE) {
+        val edit = if (editing) EditUiState(spansOf(loop), emptyMap(), loop, null, canUndo = false, canRedo = false,
+            dirty = dirty, looping = false) else null
+        AnalysisContent("Loop", loop, clock, Notation.LETTERS, 0, AudioFile.PLAYABLE, false,
+            onNotation = {}, onCapo = {}, onPickFile = {}, onBack = { backs++ }, edit = edit, editActions = actions)
+    }
+
+    private fun pressBack() = rule.runOnIdle { rule.activity.onBackPressedDispatcher.onBackPressed() }
+
+    @Test fun backWhileEditingCancelsAndDoesNotLeave() {
+        val actions = AnalysisScreenTest.Recorder()
+        show(actions, editing = true, dirty = false)
+        pressBack()
+        rule.runOnIdle { assertEquals(listOf("cancel"), actions.calls); assertEquals(0, backs) }
+    }
+
+    @Test fun backWhileEditingWithChangesAsksFirst() {
+        val actions = AnalysisScreenTest.Recorder()
+        show(actions, editing = true, dirty = true)
+        pressBack()
+        rule.onNodeWithText(DISCARD_CONFIRM).assertExists()
+        rule.runOnIdle { assertTrue(actions.calls.isEmpty()); assertEquals(0, backs) }
+    }
+
+    @Test fun backWhenNotEditingLeaves() {
+        show(AnalysisScreenTest.Recorder(), editing = false, dirty = false)
+        // the screen itself leaves through the top bar; nothing intercepts the system Back
+        rule.runOnIdle { assertFalse(rule.activity.onBackPressedDispatcher.hasEnabledCallbacks()) }
     }
 }

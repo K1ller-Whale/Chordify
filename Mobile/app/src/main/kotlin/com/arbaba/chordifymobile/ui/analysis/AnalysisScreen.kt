@@ -70,6 +70,7 @@ import com.arbaba.chordifymobile.edit.SAVE_FAILED
 import com.arbaba.chordifymobile.edit.shapeLabelOf
 import com.arbaba.chordifymobile.edit.soundingLabel
 import com.arbaba.chordifymobile.engine.model.AnalysisResult
+import com.arbaba.chordifymobile.engine.model.KeyInfo
 import com.arbaba.chordifymobile.music.guitarShape
 import com.arbaba.chordifymobile.music.shapeKey
 import com.arbaba.chordifymobile.music.Notation
@@ -196,8 +197,11 @@ fun AnalysisContent(
     val rate by clock.rate.collectAsState()
     val starts = remember(result) { result.chords.map { it.start } }
     val index by remember(starts) { derivedStateOf { chordIndexAt(starts, time.value) } }
-    val chord = result.chords[index]
-    val sounding = (preview ?: analysed).chords.getOrNull(index)?.display
+    // While editing the stage shows the selected chord, the one the panel and the editors act on.
+    val selected = edit?.selected?.takeIf { it in result.chords.indices }
+    val shownIndex = selected ?: index
+    val chord = result.chords[shownIndex]
+    val sounding = (preview ?: analysed).chords.getOrNull(shownIndex)?.display
     val chordsByDisplay = remember(result) { result.chords.filter { !isNoChord(it.label) }.associateBy { it.display } }
     val surprising = remember(result) { surprisingChords(result.chords) }
     val barStarts = remember(result) { result.bars.map { it.start } }
@@ -248,7 +252,7 @@ fun AnalysisContent(
             Text(SAVE_FAILED + it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(8.dp).testTag("saveError"))
         }
-        val picked = edit?.selected?.takeIf { it in result.chords.indices }
+        val picked = selected
         Box(Modifier.weight(1f).fillMaxWidth()) {
             if (picked == null) {
                 Text("Tap a chord in the strip to change it.", color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -310,7 +314,25 @@ fun AnalysisContent(
                      onRate = clock::setRate, looping = edit?.looping, onLoop = editActions::toggleLoop)
     }
 
-    val selected = edit?.selected?.takeIf { it in result.chords.indices }
+    // A dialog left open for a chord that is gone, or for an edit that ended, must not reopen later.
+    LaunchedEffect(edit != null, selected) {
+        val d = dialog
+        if ((edit == null && d != null && d != EditDialog.RESTORE) ||
+            (selected == null && (d == EditDialog.PICKER || d == EditDialog.SHAPE))) dialog = null
+    }
+    EditDialogs(dialog, { dialog = null }, selected, result, capo, flats, shown, preview, editActions)
+}
+
+/** The picker's and the shape editor's slots, so tests can replace the dialogs. */
+internal typealias PickerSlot = @Composable (String, List<String>, KeyInfo, Boolean, (String) -> Unit, () -> Unit) -> Unit
+internal typealias ShapeEditorSlot = @Composable (String, List<Int>?, List<Int>?, Int, (List<Int>?) -> Unit, () -> Unit) -> Unit
+
+/** The screen's open dialog, if any. [result] is the shown (capo) result and [selected] an index into it. */
+@Composable
+internal fun EditDialogs(dialog: EditDialog?, onClose: () -> Unit, selected: Int?, result: AnalysisResult, capo: Int,
+                         flats: Boolean, shapes: Map<String, List<Int>>, preview: AnalysisResult?, editActions: EditActions,
+                         picker: PickerSlot = { a, b, c, d, e, f -> ChordPicker(a, b, c, d, e, f) },
+                         shapeEditor: ShapeEditorSlot = { a, b, c, d, e, f -> ShapeEditor(a, b, c, d, e, f) }) {
     when (dialog) {
         EditDialog.PICKER -> if (selected != null) {
             val label = result.chords[selected].label
@@ -318,25 +340,24 @@ fun AnalysisContent(
             LaunchedEffect(selected, preview) {
                 suggestions = editActions.suggestions(selected).map { shapeLabelOf(it, capo, flats) }
             }
-            ChordPicker(current = label, suggestions = suggestions, key = result.key.global, flats = flats,
-                onPick = { dialog = null; editActions.rename(selected, pickToRename(it, capo, flats)) },
-                onCancel = { dialog = null })
+            picker(label, suggestions, result.key.global, flats,
+                { onClose(); editActions.rename(selected, pickToRename(it, capo, flats)) }, onClose)
         }
         EditDialog.SHAPE -> if (selected != null) {
             val chosen = result.chords[selected]
-            ShapeEditor(label = chosen.label, shape = shown[chosen.label], defaultShape = guitarShape(chosen), capo = capo,
-                onSave = { dialog = null; editActions.setShape(chosen.label, it) }, onCancel = { dialog = null })
+            shapeEditor(chosen.label, shapes[chosen.label], guitarShape(chosen), capo,
+                { onClose(); editActions.setShape(chosen.label, it) }, onClose)
         }
         EditDialog.DISCARD -> ConfirmDialog(DISCARD_CONFIRM, "Discard", "Keep editing", "discardDialog",
-            onConfirm = { dialog = null; editActions.cancelEditing() }, onDismiss = { dialog = null })
+            onConfirm = { onClose(); editActions.cancelEditing() }, onDismiss = onClose)
         EditDialog.RESTORE -> ConfirmDialog(RESTORE_CONFIRM, "Restore", "Keep my chords", "restoreDialog",
-            onConfirm = { dialog = null; editActions.restore() }, onDismiss = { dialog = null })
+            onConfirm = { onClose(); editActions.restore() }, onDismiss = onClose)
         null -> {}
     }
 }
 
 /** The dialogs the analysis screen can have open. */
-private enum class EditDialog { PICKER, SHAPE, DISCARD, RESTORE }
+internal enum class EditDialog { PICKER, SHAPE, DISCARD, RESTORE }
 
 /** The sounding label for a [picked] shown label: the picker shows the shapes to play with the capo on. */
 internal fun pickToRename(picked: String, capo: Int, flats: Boolean): String = soundingLabel(picked, capo, flats)
